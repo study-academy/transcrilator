@@ -24,18 +24,7 @@ async function api(path, body) {
   if(!response.ok)throw new Error(data.error || 'Lokale Anfrage fehlgeschlagen.');
   return data;
 }
-// The source field grows with its content from the vertical centre; the CSS max-height turns it into a scroll area once full.
-function fitSource() {
-  if($('english-panel').hidden)return;
-  const source=$('source');
-  source.style.height='auto';
-  const wrap=source.parentElement, room=wrap.clientHeight-parseFloat(getComputedStyle(wrap).paddingTop)-parseFloat(getComputedStyle(wrap).paddingBottom);
-  source.style.height=`${Math.min(source.scrollHeight,room)}px`;
-  source.style.overflowY=source.scrollHeight>room?'auto':'hidden';
-}
-window.addEventListener('resize',fitSource);
 function update() {
-  fitSource();
   const german=language==='german';
   $('action').textContent=running?'Abbrechen':german?'Kopieren':'Übersetzen';
   const ready=provider==='chatgpt'?connected && !!$('model').value:!!claudeState?.ready;
@@ -46,7 +35,6 @@ function update() {
   $('edit-prompt').setAttribute('aria-pressed',String(promptEditing));
   $('edit-prompt').setAttribute('aria-label',promptEditing?'Prompt-Bearbeitung beenden':'Prompt bearbeiten');
   $('edit-prompt').title=promptEditing?'Bearbeitung beenden':'Prompt bearbeiten';
-  $('empty-placeholder').hidden=!!$('source').value || language==='german';
   $('count').textContent=$('source').value.length?`${$('source').value.length.toLocaleString('de-DE')} / ${maxText.toLocaleString('de-DE')} Zeichen`:'';
 }
 function showLanguage(next, focusTab=false) {

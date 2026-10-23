@@ -42,7 +42,7 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 
 ## Bedienung
 
-- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter. Das Eingabefeld ist eine mittige Karte; der Text beginnt auf Höhe des Hinweises, wächst mit und wird scrollbar, sobald die Karte voll ist.
+- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter. Das Eingabefeld ist eine mittige Karte; geschrieben und eingefügt wird oben links, langer Text scrollt innerhalb der Karte.
 - Nach Abschluss wechselt die Ansicht auf `Deutsch`; derselbe Button heißt dann `Kopieren` und kopiert Text mit Formatierung (fett/kursiv) für Programme, die das unterstützen, sonst als reinen Text ohne Sternchen.
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
