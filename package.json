@@ -1,15 +1,54 @@
 {
-  "name": "local-english-german-translator",
-  "version": "1.1.0",
+  "name": "transcrilator",
+  "productName": "Transcrilator",
+  "version": "1.2.0",
+  "description": "Lokaler Englisch-Deutsch-Übersetzer für Transkripte. Nutzt das eigene Claude-Abo über Claude Code oder den eigenen ChatGPT-Plan.",
   "private": true,
   "type": "module",
+  "main": "desktop/main.js",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js"
+    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js && node --check desktop/main.js",
+    "desktop": "electron .",
+    "dist:mac": "electron-builder --mac --arm64 --x64"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.github.study-academy.transcrilator",
+    "productName": "Transcrilator",
+    "copyright": "MIT License",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "desktop/**",
+      "src/**",
+      "public/**",
+      "LICENSE"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null,
+      "artifactName": "Transcrilator-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Transcrilator ${version}"
+    }
+  }
 }

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- macOS icon grid: 824px body centred on a 1024px canvas; hairline keeps the white tile visible on light backgrounds -->
+  <rect x="102" y="102" width="820" height="820" rx="185" fill="#ffffff" stroke="#e7e9ee" stroke-width="4"/>
+  <!-- Chevron (transformation) followed by two lines of finished text, in Studyacademy blue (study-academy.de) -->
+  <g fill="none" stroke="#3b63f6" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M288 392 L408 512 L288 632"/>
+    <path d="M540 432 H736"/>
+    <path d="M540 592 H676"/>
+  </g>
+</svg>
