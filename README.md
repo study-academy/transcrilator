@@ -42,7 +42,7 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 
 ## Bedienung
 
-- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter. Das Eingabefeld ist eine mittige Karte; geschrieben und eingefügt wird oben links, langer Text scrollt innerhalb der Karte.
+- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter. Das Eingabefeld ist eine mittige Karte; geschrieben und eingefügt wird oben links, langer Text scrollt innerhalb der Karte. Zeigt man mit der Maus auf das leere Feld oder klickt hinein, erscheint mittig „Drücke ⌘ V“.
 - Während der Übersetzung erzählen wechselnde kleine Sätze mit passender Animation, was gerade mit dem Skript passiert; Balken und bei langen Texten „x von y Teilen fertig“ zeigen den echten Fortschritt. Der Ladezustand endet genau dann, wenn die Übersetzung fertig ist.
 - Erst wenn die Übersetzung vollständig ist, wechselt die Ansicht auf `Deutsch` und der Text wird automatisch in die Zwischenablage kopiert (kurzer Hinweis „In die Zwischenablage kopiert“). In der Desktop-App klappt das auch, wenn das Fenster inzwischen im Hintergrund ist. Blockiert ein Browser das automatische Kopieren, übernimmt der Button `Kopieren` das. Kopiert wird mit Formatierung (fett/kursiv) für Programme, die das unterstützen, sonst als reiner Text ohne Sternchen.
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.

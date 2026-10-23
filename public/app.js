@@ -24,6 +24,8 @@ async function api(path, body) {
   if(!response.ok)throw new Error(data.error || 'Lokale Anfrage fehlgeschlagen.');
   return data;
 }
+// Paste hint names the platform's modifier key.
+if(!/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent))$('paste-keys').textContent='Strg V';
 function update() {
   const german=language==='german';
   $('action').textContent=running?'Abbrechen':german?'Kopieren':'Übersetzen';
