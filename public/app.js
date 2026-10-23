@@ -6,9 +6,9 @@ const usageLinks={chatgpt:'https://chatgpt.com/settings/usage',claude:'https://c
 // Claude is the default; an explicit choice is remembered per browser.
 let provider='claude', claudeState=null, providerSupport=false;
 try{const saved=localStorage.getItem(providerStorageKey);if(saved==='chatgpt'||saved==='claude')provider=saved;}catch{}
-$('provider').value=provider;
-let maxText=500000, authWindow=null, awaitingAuth=false, language='english';
-window.addEventListener('focus',()=>{if(awaitingAuth && !running)init();});
+let maxText=500000, authWindow=null, awaitingAuth=false, awaitingClaude=false, language='english';
+// Returning from a sign-in (browser or Terminal) refreshes both connection states.
+window.addEventListener('focus',()=>{if((awaitingAuth || awaitingClaude) && !running)init();});
 function status(message='', error=false) {
   $('status').textContent=message;
   $('status').className=error?'error':'';
@@ -31,11 +31,11 @@ function update() {
   $('action').disabled=running?false:german?!$('output').value:!ready || !$('source').value.trim() || $('source').value.length>maxText || !$('prompt').value.trim();
   $('clear').disabled=running || (!$('source').value && !$('output').value);
   $('source').readOnly=running;$('prompt').readOnly=running || !promptEditing;$('model').disabled=running;$('reset').disabled=running;
-  $('edit-prompt').disabled=running;$('provider').disabled=running;
+  $('edit-prompt').disabled=running;
+  for(const id of ['pick-claude','pick-chatgpt','claude-reconnect','connect','disconnect'])$(id).disabled=running || (id==='pick-claude' && !providerSupport);
   $('edit-prompt').setAttribute('aria-pressed',String(promptEditing));
   $('edit-prompt').setAttribute('aria-label',promptEditing?'Prompt-Bearbeitung beenden':'Prompt bearbeiten');
   $('edit-prompt').title=promptEditing?'Bearbeitung beenden':'Prompt bearbeiten';
-  $('count').textContent=$('source').value.length?`${$('source').value.length.toLocaleString('de-DE')} / ${maxText.toLocaleString('de-DE')} Zeichen`:'';
 }
 function showLanguage(next, focusTab=false) {
   language=next;
@@ -57,18 +57,56 @@ $('language-switch').onkeydown=event=>{
     showLanguage(event.key==='Home'?'english':event.key==='End'?'german':language==='english'?'german':'english',true);
   }
 };
+// Traffic-light status per provider: green usable, yellow needs a step from the user, red unavailable.
+function claudeStatus() {
+  if(!providerSupport)return ['red','Nicht verfügbar'];
+  if(!claudeState)return ['yellow','Wird geprüft …'];
+  if(claudeState.ready)return ['green','Verbunden'];
+  if(!claudeState.installed)return ['red','Claude Code nicht installiert'];
+  if(claudeState.loggedIn)return ['yellow','Kein Claude-Abo-Login'];
+  if(claudeState.authMethod==='none')return ['yellow','Nicht angemeldet'];
+  return ['red','Nicht verfügbar'];
+}
+function chatgptStatus() {
+  if(connected)return ['green','Verbunden'];
+  if(awaitingAuth)return ['yellow','Anmeldung läuft …'];
+  return ['red','Nicht verbunden'];
+}
 function applyProvider() {
-  $('chatgpt-settings').hidden=provider==='claude';
-  $('provider-hint').textContent=provider==='claude'?(claudeState?.reason || 'Claude ist noch nicht verfügbar.'):providerSupport?'':'Claude wird nach dem nächsten Serverstart verfügbar. Die laufende App wird dafür nicht automatisch neu gestartet.';
-  $('plan-name').textContent=provider==='claude'?'Claude-Plan':'ChatGPT-Plan';
-  $('plan-link').href=usageLinks[provider];
-  $('plan').hidden=provider==='chatgpt'?!connected:!claudeState?.ready;
+  for(const name of ['claude','chatgpt'])$('pick-'+name).setAttribute('aria-checked',String(provider===name));
+  const [claudeLevel,claudeText]=claudeStatus(), [chatgptLevel,chatgptText]=chatgptStatus();
+  $('claude-dot').dataset.level=claudeLevel;$('claude-state').textContent=claudeText;
+  $('chatgpt-dot').dataset.level=chatgptLevel;$('connection').textContent=chatgptText;
+  $('disconnect').hidden=!connected;
+  $('chatgpt-settings').hidden=provider!=='chatgpt' || !connected;
+  $('provider-hint').textContent=provider==='claude' && claudeState && !claudeState.ready?claudeState.reason:'';
+  const level=provider==='claude'?claudeLevel:chatgptLevel;
+  $('settings-toggle').title=`Einstellungen · ${provider==='claude'?'Claude':'ChatGPT'} · ${level==='green'?'Verbunden':'Nicht verbunden'}`;
+  // OpenAI requires the plan notice near the composer while ChatGPT plan usage is active; Claude needs none.
+  $('plan').hidden=provider!=='chatgpt' || !connected;
   update();
 }
-$('provider').onchange=()=>{
-  provider=$('provider').value;
+function selectProvider(next, focus=false) {
+  provider=next;
   try{localStorage.setItem(providerStorageKey,provider);}catch{}
   applyProvider();
+  if(focus)$('pick-'+next).focus();
+}
+for(const name of ['claude','chatgpt'])$('pick-'+name).onclick=()=>selectProvider(name);
+$('providers').onkeydown=event=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) {
+    event.preventDefault();
+    const next=provider==='claude'?'chatgpt':'claude';
+    if(!$('pick-'+next).disabled)selectProvider(next,true);
+  }
+};
+$('claude-reconnect').onclick=async()=>{
+  try {
+    const {opened}=await api('/api/claude/login',{});
+    awaitingClaude=opened;
+    status(opened?'Claude-Anmeldung im Terminal abschließen und danach zur App zurückkehren.':'Im Terminal anmelden: claude auth login');
+  } catch(error) {status(error.message,true);}
+  claudeState=null;applyProvider();await init();
 };
 async function init() {
   try {
@@ -78,14 +116,11 @@ async function init() {
       $('prompt').value=saved===null?defaultPrompt:saved;promptInitialized=true;
     }
     try{const providers=await api('/api/providers');claudeState=providers.claude;providerSupport=true;}catch{providerSupport=false;claudeState=null;}
-    $('claude-option').disabled=!providerSupport;
-    if(!providerSupport && provider==='claude'){provider='chatgpt';$('provider').value=provider;}
+    if(!providerSupport && provider==='claude')provider='chatgpt';
+    if(claudeState?.ready)awaitingClaude=false;
     const wasConnected=connected;connected=state.connected;
     if(connected && !wasConnected)status();
     if(connected || state.error)awaitingAuth=false;
-    $('connection').textContent=connected?'Verbunden':'Nicht verbunden';
-    $('settings-toggle').title=connected?'Einstellungen · Verbunden':'Einstellungen · Nicht verbunden';
-    $('connect').hidden=connected;$('disconnect').hidden=!connected;$('plan').hidden=!connected;
     if(state.error)status(state.error,true);
     if(!connected) {
       $('model').hidden=true;$('model-label').hidden=true;$('model').replaceChildren();
@@ -105,7 +140,7 @@ $('connect').onclick=()=>{
 };
 $('consent').addEventListener('close',async()=>{
   if($('consent').returnValue!=='continue')return;
-  awaitingAuth=true;
+  awaitingAuth=true;applyProvider();
   authWindow=window.open('about:blank','translator-chatgpt','popup,width=650,height=780');
   if(!authWindow){awaitingAuth=false;status('Bitte Pop-ups für diese lokale Seite erlauben und erneut verbinden.',true);return;}
   try {

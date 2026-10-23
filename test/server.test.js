@@ -73,3 +73,13 @@ test('Claude provider works through local HTTP without a ChatGPT session and nev
  assert.equal(events.at(-1).type,'completed');assert.equal(events.at(-1).text,'**Vollständige Übersetzung**');
  assert.equal(request.text,'Hello');assert.equal(request.prompt,'Exact user prompt');assert.equal(externalCalls,0);
 });
+test('Claude reconnect only opens the official CLI login through a protected local POST',async t=>{
+ const path=await mkdtemp(`${tmpdir()}/translator-login-test-`),runtime=pathToFileURL(`${path}/`);let opened=0;
+ const app=await createApp({runtime,fetcher:async()=>{throw new Error('No external call');},claudeLogin:()=>{opened++;return true;},claude:{inspect:async()=>({installed:true,ready:false,loggedIn:false,authMethod:'none'})}});
+ await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
+ t.after(async()=>{app.closeAllConnections();await new Promise(r=>app.close(r));await rm(path,{recursive:true,force:true});});
+ assert.equal((await fetch(origin+'/api/claude/login',{method:'POST'})).status,403);assert.equal(opened,0);
+ const {csrf}=await(await fetch(origin+'/api/status')).json();
+ const response=await fetch(origin+'/api/claude/login',{method:'POST',headers:{Origin:origin,'X-Local-CSRF':csrf,'Content-Type':'application/json'},body:'{}'});
+ assert.deepEqual(await response.json(),{opened:true});assert.equal(opened,1);
+});

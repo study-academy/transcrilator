@@ -1,12 +1,21 @@
 import http from 'node:http';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { randomUUID, randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ChatGPTConnection } from './auth.js';
 import { ClaudePlan } from './claude.js';
 import { translate, DEFAULT_PROMPT, MAX_TEXT, apiError } from './translate.js';
 const root = new URL('../',import.meta.url);
-export async function createApp({fetcher=fetch, runtime=new URL('.runtime/',root),claude=new ClaudePlan()}={}) {
+// Opens the official Claude Code sign-in in the user's own Terminal; the app never sees the login.
+// Only macOS is supported; elsewhere the user runs the command themselves.
+export function openClaudeLogin() {
+  if(process.platform!=='darwin')return false;
+  const child=spawn('osascript',['-e','tell application "Terminal" to activate','-e','tell application "Terminal" to do script "claude auth login --claudeai"'],{stdio:'ignore',detached:true});
+  child.on('error',()=>{});child.unref();
+  return true;
+}
+export async function createApp({fetcher=fetch, runtime=new URL('.runtime/',root),claude=new ClaudePlan(),claudeLogin=openClaudeLogin}={}) {
   await mkdir(runtime,{recursive:true,mode:0o700});
   const metadata=new URL('host.json',runtime);
   let saved;
@@ -40,6 +49,7 @@ export async function createApp({fetcher=fetch, runtime=new URL('.runtime/',root
         res.writeHead(303,{Location:'/auth/finished'}); return res.end();
       }
       if(req.method==='POST' && url.pathname==='/api/connect') { if(busy) return json(409,{error:'Übersetzung läuft.'}); return json(200,{url:auth.start(`${origin}/auth/callback`)}); }
+      if(req.method==='POST' && url.pathname==='/api/claude/login') { if(busy) return json(409,{error:'Übersetzung läuft.'}); return json(200,{opened:claudeLogin()}); }
       if(req.method==='POST' && url.pathname==='/api/acknowledge') { await auth.acknowledge(); return json(200,{ok:true}); }
       if(req.method==='POST' && url.pathname==='/api/disconnect') { active?.abort(); auth.disconnect(); catalog=[]; return json(200,{ok:true}); }
       if(req.method==='GET' && url.pathname==='/api/models') {
