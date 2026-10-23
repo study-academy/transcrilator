@@ -48,6 +48,18 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
 
+## Kurzbefehle
+
+| Aktion | Mac |
+|---|---|
+| Übersetzen bzw. Kopieren (Hauptaktion) | ⌘ ↩ |
+| Text einfügen, ohne vorher ins Feld zu klicken | ⌘ V |
+| Fertige Übersetzung kopieren | ⌘ C |
+| Zwischen Englisch und Deutsch wechseln | ⌃ Tab oder ⌘ ⇧ [ / ] |
+| Einstellungen öffnen | ⌘ , |
+
+⌘ Tab gehört macOS für den Programmwechsel und kann von keiner App genutzt werden. Die Übersicht steht auch in den Einstellungen hinter dem ⌘-Symbol; beim kurzen Zeigen mit der Maus erscheint der jeweilige Kurzbefehl klein unter dem Element. Unter Windows und Linux gilt Strg statt ⌘. In der Browser-Variante kann der Browser einzelne Kurzbefehle wie ⌃ Tab selbst belegen.
+
 ## Grenzen und Verlässlichkeit
 
 - Bis zu 500.000 Zeichen pro Übersetzung. Nichts wird still abgeschnitten.

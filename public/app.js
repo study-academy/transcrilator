@@ -161,7 +161,15 @@ $('disconnect').onclick=async()=>{
   catch(error){status(error.message,true);}
 };
 $('edit-prompt').onclick=()=>{if(running)return;promptEditing=!promptEditing;update();if(promptEditing)$('prompt').focus();};
-$('settings').addEventListener('toggle',event=>{if(event.newState==='closed'){promptEditing=false;update();}});
+// The ⌘ button swaps the settings for a read-only list of shortcuts; closing the popover returns to the settings.
+function showShortcuts(visible) {
+  $('shortcuts').hidden=!visible;$('settings-main').hidden=visible;
+  $('settings-title').textContent=visible?'Kurzbefehle':'Einstellungen';
+  $('shortcuts-toggle').setAttribute('aria-expanded',String(visible));
+  $('shortcuts-toggle').setAttribute('aria-label',visible?'Zurück zu den Einstellungen':'Kurzbefehle anzeigen');
+}
+$('shortcuts-toggle').onclick=()=>showShortcuts($('shortcuts').hidden);
+$('settings').addEventListener('toggle',event=>{if(event.newState==='closed'){promptEditing=false;showShortcuts(false);update();}});
 $('prompt-settings').addEventListener('toggle',()=>{if(!$('prompt-settings').open){promptEditing=false;update();}});
 $('reset').onclick=()=>{
   $('prompt').value=defaultPrompt;promptEditing=false;
@@ -314,7 +322,40 @@ $('action').onclick=()=>{
   if(language==='german')return copy();
   if(!$('action').disabled)return translate();
 };
+// Keyboard: Cmd/Ctrl+Enter runs the main action, Cmd/Ctrl+, opens settings, Ctrl+Tab or Cmd+Shift+[ ]
+// switches language (Cmd+Tab itself belongs to macOS). Paste and copy work without focusing a field first.
+const isField=element=>element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement || element instanceof HTMLSelectElement;
 document.addEventListener('keydown',event=>{
-  if((event.metaKey||event.ctrlKey)&&event.key==='Enter'&&!$('action').disabled){event.preventDefault();$('action').click();}
+  const mod=event.metaKey||event.ctrlKey;
+  if(mod&&event.key==='Enter'&&!$('action').disabled){event.preventDefault();$('action').click();return;}
+  if(mod&&event.key===','){event.preventDefault();$('settings').togglePopover();return;}
+  const tabSwitch=event.ctrlKey&&!event.metaKey&&event.key==='Tab';
+  const bracketSwitch=event.metaKey&&event.shiftKey&&(event.code==='BracketLeft'||event.code==='BracketRight');
+  if((tabSwitch||bracketSwitch)&&!running&&!document.querySelector('dialog[open]')) {
+    event.preventDefault();
+    showLanguage(language==='english'?'german':'english',true);
+  }
+});
+document.addEventListener('paste',event=>{
+  const source=$('source');
+  if(running || event.target===source || (isField(document.activeElement)&&document.activeElement!==source) || document.querySelector('dialog[open]'))return;
+  const text=event.clipboardData?.getData('text/plain');
+  if(!text)return;
+  event.preventDefault();
+  const focused=document.activeElement===source;
+  showLanguage('english');source.focus();
+  if(!focused)source.setSelectionRange(source.value.length,source.value.length);
+  source.setRangeText(text,source.selectionStart,source.selectionEnd,'end');
+  source.dispatchEvent(new Event('input'));
+});
+document.addEventListener('copy',event=>{
+  const active=document.activeElement;
+  if(isField(active)&&active.selectionStart!==active.selectionEnd)return;
+  if(!window.getSelection().isCollapsed)return;
+  if(!$('output').value)return;
+  event.preventDefault();
+  event.clipboardData.setData('text/plain',plainOutput());
+  event.clipboardData.setData('text/html',$('output-view').innerHTML);
+  toast('In die Zwischenablage kopiert');
 });
 init();
