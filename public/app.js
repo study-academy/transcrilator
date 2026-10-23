@@ -203,24 +203,70 @@ function setOutput(text) {
   }
 }
 function plainOutput(){return [...$('output-view').children].map(element=>element.textContent).join('\n\n');}
-async function copy() {
-  if(!$('output').value)return;
+let toastTimer=null;
+function toast(message) {
+  clearTimeout(toastTimer);
+  $('toast-text').textContent=message;$('toast').hidden=false;
+  requestAnimationFrame(()=>$('toast').classList.add('visible'));
+  toastTimer=setTimeout(()=>{$('toast').classList.remove('visible');toastTimer=setTimeout(()=>{$('toast').hidden=true;},250);},1800);
+}
+async function writeClipboard() {
   const text=plainOutput();
+  if(typeof ClipboardItem==='function' && navigator.clipboard.write) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([$('output-view').innerHTML],{type:'text/html'})})]);
+      return;
+    } catch {}
+  }
+  await navigator.clipboard.writeText(text);
+}
+// automatic: right after a finished translation; a refusal there only hints at the button and never selects text.
+async function copy({automatic=false}={}) {
+  if(!$('output').value)return;
   try {
-    if(typeof ClipboardItem==='function' && navigator.clipboard.write) {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([$('output-view').innerHTML],{type:'text/html'})})]);
-      } catch {await navigator.clipboard.writeText(text);}
-    } else await navigator.clipboard.writeText(text);
-    status('Kopiert.');
+    await writeClipboard();
+    toast('In die Zwischenablage kopiert');
   } catch {
+    if(automatic){status('Fertig. Mit „Kopieren“ in die Zwischenablage übernehmen.');return;}
     const range=document.createRange();range.selectNodeContents($('output-view'));
     const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);$('output-view').focus();
     status('Bitte den markierten Text mit ⌘C oder Strg+C kopieren.');
   }
 }
+// Progress veil: phase text plus a bar that creeps towards the next milestone so long chunks still feel alive.
+const progress={target:0,shown:0,cap:0,timer:null};
+function progressText(text) {
+  if($('progress-text').textContent===text)return;
+  $('progress-text').classList.add('swap');
+  setTimeout(()=>{$('progress-text').textContent=text;$('progress-text').classList.remove('swap');},140);
+}
+function progressStep(text,target,cap=target) {
+  progressText(text);progress.target=Math.max(progress.target,target);progress.cap=Math.max(cap,progress.target);
+}
+function startProgress(name) {
+  Object.assign(progress,{target:0,shown:0,cap:0});
+  $('progress-fill').style.transform='scaleX(0)';$('progress-text').textContent='';
+  $('progress').hidden=false;requestAnimationFrame(()=>$('progress').classList.add('visible'));
+  progressStep(`${name} wird vorbereitet`,0.04,0.1);
+  progress.timer=setInterval(()=>{
+    progress.shown=Math.max(progress.target,progress.shown+(progress.cap-progress.shown)*0.04);
+    $('progress-fill').style.transform=`scaleX(${progress.shown.toFixed(3)})`;
+  },300);
+}
+function chunkProgress({done,total}) {
+  const share=done/total, next=(done+1)/total;
+  if(done<total)progressStep(total===1?'Übersetze den Text':`Übersetze ${total} Teile · ${done} fertig`,0.1+0.8*share,0.1+0.8*next-0.02);
+  else progressStep('Setze die Übersetzung zusammen',0.94,0.98);
+}
+async function stopProgress(finished) {
+  clearInterval(progress.timer);
+  if(finished){$('progress-fill').style.transform='scaleX(1)';progressText('Fertig');await new Promise(r=>setTimeout(r,450));}
+  $('progress').classList.remove('visible');
+  await new Promise(r=>setTimeout(r,180));$('progress').hidden=true;
+}
 async function translate() {
-  running=true;controller=new AbortController();setOutput('');status('Übersetzt …');update();
+  running=true;controller=new AbortController();setOutput('');status();update();
+  startProgress(provider==='claude'?'Claude':'ChatGPT');
   let completed=false;
   try {
     const response=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json','X-Local-CSRF':csrf},signal:controller.signal,body:JSON.stringify({provider,text:$('source').value,prompt:$('prompt').value,model:$('model').value})});
@@ -230,7 +276,7 @@ async function translate() {
       if(!line.trim())return;
       const item=JSON.parse(line);
       if(item.type==='error')throw new Error(item.error);
-      if(item.type==='progress')status(`Übersetzt · ${item.done} / ${item.total} Teile`);
+      if(item.type==='progress')chunkProgress(item);
       if(item.type==='completed') {
         if(typeof item.text!=='string'||!item.text.trim())throw new Error('Leere Übersetzung.');
         setOutput(item.text);completed=true;
@@ -243,8 +289,12 @@ async function translate() {
     }
     buffer+=decoder.decode();if(buffer.trim())event(buffer);
     if(!completed)throw new Error('Verbindung abgebrochen. Keine vollständige Übersetzung erhalten.');
+    // The German view only appears once the whole translation is complete.
+    await stopProgress(true);
     status();showLanguage('german');
+    await copy({automatic:true});
   } catch(error) {
+    await stopProgress(false);
     setOutput('');status(error.name==='AbortError'?'Abgebrochen. Keine vollständige Übersetzung erstellt.':error.message,true);
     controller?.abort();if(error.name!=='AbortError')await init();
   } finally {running=false;controller=null;update();}
