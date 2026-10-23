@@ -11,13 +11,13 @@ Es gibt keinen eigenen App-Login, keine API-Key-Eingabe und keine API-Ausweichro
 
 ## Installation (macOS)
 
-1. Unter [Releases](../../releases/latest) die passende Datei laden:
-   - Apple Silicon (M1 bis M4 und neuer): `Transcrilator-<Version>-arm64.dmg`
-   - Intel-Mac: `Transcrilator-<Version>-x64.dmg`
+1. Unter [Releases](../../releases/latest) `Transcrilator-<Version>-arm64.dmg` laden. Sie ist für Macs mit Apple Silicon (M1 und neuer). Für Intel-Macs gibt es vorerst keine fertige App; dort die Browser-Variante nutzen oder selbst mit `npm run dist:mac` bauen.
 2. DMG öffnen und `Transcrilator` in den Ordner `Programme` ziehen.
 3. Die App ist nicht von Apple signiert. Beim ersten Start meldet macOS deshalb, dass die App nicht geöffnet werden kann. Dann einmalig: **Systemeinstellungen → Datenschutz & Sicherheit → nach unten scrollen → „Dennoch öffnen“** und mit dem eigenen Mac-Passwort bestätigen. Danach startet sie normal.
 
 Windows und Linux sind nicht gebaut und nicht getestet. Dort funktioniert die Browser-Variante (siehe unten).
+
+Wenn die App schon installiert ist und eine neue Version erscheint: neue DMG laden und die alte App in `Programme` ersetzen. Einstellungen bleiben erhalten.
 
 ## Claude einrichten (einmalig pro Person)
 
@@ -42,7 +42,7 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 
 ## Bedienung
 
-- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter.
+- Text im Tab `Englisch` einfügen, `Übersetzen` oder Cmd+Enter. Das Eingabefeld ist eine mittige Karte; der Text beginnt auf Höhe des Hinweises, wächst mit und wird scrollbar, sobald die Karte voll ist.
 - Nach Abschluss wechselt die Ansicht auf `Deutsch`; derselbe Button heißt dann `Kopieren` und kopiert Text mit Formatierung (fett/kursiv) für Programme, die das unterstützen, sonst als reinen Text ohne Sternchen.
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
