@@ -7,6 +7,14 @@ import { ChatGPTConnection } from './auth.js';
 import { ClaudePlan } from './claude.js';
 import { translate, DEFAULT_PROMPT, MAX_TEXT, apiError } from './translate.js';
 const root = new URL('../',import.meta.url);
+// The only files the browser may load. Local transcription adds a worker and the vendored ONNX runtime.
+const STATIC={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/transcribe-worker.js':'transcribe-worker.js',
+  '/vendor/transformers.min.js':'vendor/transformers.min.js','/vendor/ort-wasm-simd-threaded.asyncify.mjs':'vendor/ort-wasm-simd-threaded.asyncify.mjs',
+  '/vendor/ort-wasm-simd-threaded.asyncify.wasm':'vendor/ort-wasm-simd-threaded.asyncify.wasm'};
+const TYPES={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',wasm:'application/wasm'};
+// The Whisper model is fetched once from Hugging Face; WebAssembly needs 'wasm-unsafe-eval', and the
+// ONNX runtime imports its own loader from a same-origin blob: copy inside the worker.
+const MODEL_HOSTS='https://huggingface.co https://*.huggingface.co https://*.hf.co';
 // Opens the official Claude Code sign-in in the user's own Terminal; the app never sees the login.
 // Only macOS is supported; elsewhere the user runs the command themselves.
 export function openClaudeLogin() {
@@ -29,17 +37,17 @@ export async function createApp({fetcher=fetch, runtime=new URL('.runtime/',root
   const app=http.createServer(async (req,res)=>{
     const origin=`http://127.0.0.1:${app.address().port}`;
     res.setHeader('Cache-Control','no-store'); res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','no-referrer');
-    res.setHeader('Content-Security-Policy',"default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy',`default-src 'self'; connect-src 'self' ${MODEL_HOSTS}; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
     const json=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
     try {
       if(req.headers.host !== new URL(origin).host) return json(403,{error:'Ungültiger Host.'});
       const url=new URL(req.url,origin);
       if(req.headers.origin && req.headers.origin!==origin) return json(403,{error:'Fremder Ursprung blockiert.'});
       if(req.method==='POST' && (req.headers.origin!==origin || req.headers['x-local-csrf']!==csrf)) return json(403,{error:'Ungültige lokale Anfrage.'});
-      if(req.method==='GET' && ['/','/app.js','/style.css'].includes(url.pathname)) {
-        const name=url.pathname==='/'?'index.html':url.pathname.slice(1);
+      if(req.method==='GET' && Object.hasOwn(STATIC,url.pathname)) {
+        const name=STATIC[url.pathname];
         const data=await readFile(new URL(`public/${name}`,root));
-        res.writeHead(200,{'Content-Type':name.endsWith('html')?'text/html; charset=utf-8':name.endsWith('js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8'}); return res.end(data);
+        res.writeHead(200,{'Content-Type':TYPES[name.split('.').pop()]}); return res.end(data);
       }
       if(req.method==='GET' && url.pathname==='/auth/finished') {res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});return res.end('<!doctype html><html lang="de"><meta charset="utf-8"><title>ChatGPT-Verbindung</title><p>Die Anmeldung ist beendet. Dieses Fenster schließen und zum Übersetzer zurückkehren.</p></html>');}
       if(req.method==='GET' && url.pathname==='/api/providers') return json(200,{claude:await claude.inspect()});

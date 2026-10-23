@@ -284,14 +284,14 @@ const PHRASES=[
 ];
 const progress={target:0,shown:0,cap:0,timer:null,phraseTimer:null,order:[],next:0};
 function showPhrase() {
-  if(progress.next>=progress.order.length){progress.order=[...PHRASES].sort(()=>Math.random()-0.5);progress.next=0;}
+  if(progress.next>=progress.order.length){progress.order=[...(progress.phrases||PHRASES)].sort(()=>Math.random()-0.5);progress.next=0;}
   const [text,anim]=progress.order[progress.next++];
   $('progress-text').classList.add('swap');
   setTimeout(()=>{$('progress-text').textContent=text;$('scribble').dataset.anim=anim;$('progress-text').classList.remove('swap');},140);
 }
 function progressStep(target,cap=target){progress.target=Math.max(progress.target,target);progress.cap=Math.max(cap,progress.target);}
-function startProgress() {
-  Object.assign(progress,{target:0,shown:0,cap:0,next:progress.order.length});
+function startProgress(phrases=PHRASES) {
+  Object.assign(progress,{target:0,shown:0,cap:0,next:progress.order.length,phrases});
   $('progress-fill').style.transform='scaleX(0)';$('progress-detail').hidden=true;
   showPhrase();$('progress').hidden=false;requestAnimationFrame(()=>$('progress').classList.add('visible'));
   progressStep(0.04,0.1);
@@ -311,6 +311,90 @@ function stopProgress() {
   $('progress').classList.remove('visible');
   setTimeout(()=>{if(!running)$('progress').hidden=true;},180);
 }
+// Local transcription: the audio track is decoded here, Whisper runs in a worker, and the English
+// transcript then goes straight into translation. Nothing is uploaded.
+const LISTEN_PHRASES=[
+  ['Spitze die Ohren','bounce'],['Lausche jedem Wort','type'],['Zähle heimlich die Ähms','bounce'],
+  ['Schreibe fleißig mit','type'],['Trenne Musik von Worten','sweep'],['Sortiere die Silben','sort'],
+  ['Poliere die Aussprache','sparkle'],['Höre zwischen den Zeilen','slant'],['Drehe die Lautstärke im Kopf auf','iron']
+];
+const MEDIA_PATTERN=/\.(mp4|m4v|mov|m4a|mp3|wav|aac|webm|ogg|oga|opus|flac|mkv)$/i;
+let transcriber=null;
+async function decodeAudio(file) {
+  const context=new AudioContext({sampleRate:16000});
+  try {
+    const decoded=await context.decodeAudioData(await file.arrayBuffer());
+    const audio=new Float32Array(decoded.length);
+    for(let channel=0;channel<decoded.numberOfChannels;channel++) {
+      const data=decoded.getChannelData(channel);
+      for(let i=0;i<data.length;i++)audio[i]+=data[i]/decoded.numberOfChannels;
+    }
+    return audio;
+  } catch {
+    throw new Error('Die Tonspur dieser Datei lässt sich nicht lesen. Bitte MP4, MOV, M4A, MP3, WAV oder WebM verwenden.');
+  } finally {context.close();}
+}
+function runWhisper(audio,signal) {
+  return new Promise((resolve,reject)=>{
+    transcriber ||= new Worker('/transcribe-worker.js',{type:'module'});
+    const worker=transcriber;
+    const stop=()=>{worker.terminate();if(transcriber===worker)transcriber=null;reject(new DOMException('Abgebrochen.','AbortError'));};
+    signal.addEventListener('abort',stop,{once:true});
+    worker.onerror=event=>{signal.removeEventListener('abort',stop);event.preventDefault();transcriber=null;worker.terminate();reject(new Error('Die lokale Spracherkennung konnte nicht starten.'));};
+    worker.onmessage=({data})=>{
+      if(data.type==='download') {
+        const mb=n=>Math.round(n/1e6);
+        $('progress-detail').hidden=false;$('progress-detail').textContent=`Lade Spracherkennung (einmalig) · ${mb(data.loaded)} von ${mb(data.total)} MB`;
+        progressStep(0.04+0.26*data.loaded/data.total,0.3);
+      }
+      if(data.type==='chunks') {
+        $('progress-detail').hidden=false;$('progress-detail').textContent=data.total>1?`Transkribiere · ${data.done} von ${data.total} Abschnitten`:'Transkribiere';
+        progressStep(0.3+0.68*data.done/data.total,0.3+0.68*(data.done+1)/data.total-0.02);
+      }
+      if(data.type==='done'||data.type==='error') {
+        signal.removeEventListener('abort',stop);
+        if(data.type==='done')resolve(data.text);else reject(new Error(`Transkription fehlgeschlagen: ${data.error}`));
+      }
+    };
+    worker.postMessage({type:'transcribe',audio},[audio.buffer]);
+  });
+}
+async function transcribeFile(file) {
+  if(running || !file)return;
+  if(!/^(audio|video)\//.test(file.type) && !MEDIA_PATTERN.test(file.name)){status('Bitte eine Video- oder Audiodatei wählen.',true);return;}
+  running=true;controller=new AbortController();const signal=controller.signal;
+  setOutput('');status();showLanguage('english');update();
+  startProgress(LISTEN_PHRASES);
+  $('progress-detail').hidden=false;$('progress-detail').textContent='Lese die Tonspur';
+  let text='';
+  try {
+    const audio=await decodeAudio(file);
+    signal.throwIfAborted();
+    if(!audio.length)throw new Error('Die Datei enthält keine Tonspur.');
+    progressStep(0.04,0.1);
+    text=await runWhisper(audio,signal);
+  } catch(error) {
+    stopProgress();running=false;controller=null;
+    status(error.name==='AbortError'?'Transkription abgebrochen.':error.message,true);update();return;
+  }
+  stopProgress();running=false;controller=null;
+  $('source').value=text;$('source').dispatchEvent(new Event('input'));
+  // Straight on to German when a provider is ready; otherwise the English transcript waits in the field.
+  if(!$('action').disabled)return translate();
+  status('Englisches Transkript fertig. Zum Übersetzen einen Anbieter verbinden.');update();
+}
+$('file-input').onchange=()=>{const file=$('file-input').files[0];$('file-input').value='';transcribeFile(file);};
+const editorWrap=document.querySelector('.editor-wrap');
+let dragDepth=0;
+const hasFiles=event=>[...(event.dataTransfer?.types||[])].includes('Files');
+document.addEventListener('dragenter',event=>{if(!hasFiles(event)||running)return;dragDepth++;editorWrap.dataset.drop='on';});
+document.addEventListener('dragleave',event=>{if(!hasFiles(event))return;dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)delete editorWrap.dataset.drop;});
+document.addEventListener('dragover',event=>{if(hasFiles(event)){event.preventDefault();event.dataTransfer.dropEffect=running?'none':'copy';}});
+document.addEventListener('drop',event=>{
+  if(!hasFiles(event))return;
+  event.preventDefault();dragDepth=0;delete editorWrap.dataset.drop;
+  transcribeFile(event.dataTransfer.files[0]);
+});
 async function translate() {
   running=true;controller=new AbortController();setOutput('');status();update();
   startProgress();
@@ -359,6 +443,7 @@ document.addEventListener('keydown',event=>{
   const mod=event.metaKey||event.ctrlKey;
   if(mod&&event.key==='Enter'&&!$('action').disabled){event.preventDefault();$('action').click();return;}
   if(mod&&event.key===','){event.preventDefault();$('settings').togglePopover();return;}
+  if(mod&&event.key.toLowerCase()==='o'&&!running&&!document.querySelector('dialog[open]')){event.preventDefault();$('file-input').click();return;}
   const inOverlay=!!document.querySelector('dialog[open]') || $('settings').matches(':popover-open');
   if(mod&&event.key==='Backspace'&&!inOverlay&&!$('clear').disabled){event.preventDefault();$('clear').click();return;}
   // Shift+Tab keeps its usual focus role inside settings and dialogs.

@@ -64,11 +64,20 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
 
+## Video lokal transkribieren
+
+Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM) in die Karte ziehen oder mit ⌘ O auswählen. Die App liest die Tonspur aus, Whisper (`onnx-community/whisper-small.en`, englisch) erstellt daraus lokal das englische Transkript, und danach übersetzt der gewählte Anbieter automatisch ins Deutsche.
+
+- Ton und Transkript bleiben auf dem Rechner. Nur das Modell (rund 410 MB) wird beim ersten Mal einmalig von Hugging Face geladen und danach aus dem Cache verwendet.
+- Auf Macs mit Apple Silicon läuft Whisper über WebGPU auf der Grafikeinheit; ohne WebGPU auf der CPU (langsamer).
+- Die nötigen Bibliotheken liegen unverändert unter `public/vendor/` (transformers.js, Apache-2.0; ONNX Runtime Web, MIT) und werden nie von einem CDN geladen.
+
 ## Kurzbefehle
 
 | Aktion | Mac |
 |---|---|
 | Übersetzen bzw. Kopieren (Hauptaktion) | ⌘ ↩ |
+| Video oder Audio lokal transkribieren | ⌘ O |
 | Text einfügen, ohne vorher ins Feld zu klicken | ⌘ V |
 | Fertige Übersetzung kopieren | ⌘ C |
 | Zwischen Englisch und Deutsch wechseln | ⇧ ⇥ (auch ⌃ ⇥ oder ⌘ ⇧ [ / ]) |
