@@ -27,8 +27,8 @@ function runCommand(executable,args,{cwd,env,input='',signal,timeout=15000}) {
   });
 }
 export class ClaudePlan {
-  constructor({run=runCommand,environment=process.env,executable='claude'}={}) {
-    this.run=run;this.env=claudeEnvironment(environment);this.executable=executable;this.capabilities=null;
+  constructor({run=runCommand,environment=process.env,executable='claude',concurrency=3}={}) {
+    this.run=run;this.env=claudeEnvironment(environment);this.executable=executable;this.concurrency=concurrency;this.capabilities=null;
   }
   async inEmptyDirectory(callback) {
     const cwd=await mkdtemp(`${tmpdir()}/local-translator-claude-`);
@@ -61,23 +61,40 @@ export class ClaudePlan {
     if(typeof prompt!=='string'||!prompt.trim()||prompt.length>12000)throw new Error('Ungültiger Prompt.');
     const availability=await this.inspect({signal});
     if(!availability.ready)throw new Error(availability.reason);
-    const result=[];
-    for(let index=0;index<chunks.length;index++) {
-      signal?.throwIfAborted();progress({done:index,total:chunks.length});
-      const response=await this.inEmptyDirectory(cwd=>this.run(this.executable,[
-        '-p','--safe-mode','--tools','','--disallowedTools','mcp__*','--strict-mcp-config','--mcp-config','{"mcpServers":{}}',
-        '--no-session-persistence','--no-chrome','--permission-prompts','none','--output-format','json','--model','sonnet','--system-prompt',prompt
-      ],{cwd,env:this.env,input:chunks[index],signal,timeout:180000}));
-      let data;try{data=JSON.parse(response.stdout);}catch{throw new Error('Claude Code hat keine gültige vollständige JSON-Antwort geliefert.');}
-      if(response.code!==0 || data.type!=='result' || data.subtype!=='success' || data.is_error!==false || typeof data.result!=='string' || !data.result.trim() || data.result.length>200000 || data.permission_denials?.length || data.stop_reason==='max_tokens') {
-        const message=typeof data.result==='string'?data.result:'';
-        const category=/usage.?limit|rate.?limit|limit reached|hit your limit|resets/i.test(message)?'usage_limit':/unknown option|unsupported option|invalid.*(?:argument|option|flag)/i.test(message)?'cli_options':/api.?key|billing|credit/i.test(message)?'billing':/not logged|log.?in|authentication|oauth/i.test(message)?'authentication':/permission|denied/i.test(message)?'policy':/network|connection|ENOTFOUND|fetch failed/i.test(message)?'network':'incomplete_result';
-        const error=new Error(category==='usage_limit'?'Claude-Planlimit erreicht. Bitte die Nutzung direkt in Claude Code prüfen. Keine API-Ausweichroute verwendet.':'Claude Code hat diesen Teil nicht vollständig abgeschlossen. Bitte Planlimit oder Anmeldung im offiziellen CLI prüfen. Keine API-Ausweichroute verwendet.');
-        error.diagnostics={exitCode:response.code,category,resultType:data.type==='result'?'result':'other',successSubtype:data.subtype==='success',isError:data.is_error===true,resultCharacters:message.length,permissionDenials:Array.isArray(data.permission_denials)?data.permission_denials.length:0};
-        throw error;
+    // Chunks are independent, so a few run in parallel; output order is fixed by index.
+    // The first failure aborts the remaining subprocesses and nothing partial is returned.
+    const result=new Array(chunks.length),local=new AbortController();
+    const forward=()=>local.abort(signal.reason);
+    signal?.addEventListener('abort',forward,{once:true});
+    let next=0,done=0,failure=null;
+    progress({done:0,total:chunks.length});
+    const worker=async()=>{
+      while(!failure && next<chunks.length) {
+        const index=next++;
+        try{result[index]=await this.translateChunk(chunks[index],prompt,local.signal);}
+        catch(error){failure ||= error;local.abort(error);return;}
+        progress({done:++done,total:chunks.length});
       }
-      result.push(data.result.trim());progress({done:index+1,total:chunks.length});
-    }
+    };
+    try{await Promise.all(Array.from({length:Math.min(this.concurrency,chunks.length)},worker));}
+    finally{signal?.removeEventListener('abort',forward);}
+    if(failure)throw signal?.aborted?signal.reason:failure;
     return result.join('\n\n');
+  }
+  async translateChunk(chunk,prompt,signal) {
+    signal?.throwIfAborted();
+    const response=await this.inEmptyDirectory(cwd=>this.run(this.executable,[
+      '-p','--safe-mode','--tools','','--disallowedTools','mcp__*','--strict-mcp-config','--mcp-config','{"mcpServers":{}}',
+      '--no-session-persistence','--no-chrome','--permission-prompts','none','--output-format','json','--model','sonnet','--system-prompt',prompt
+    ],{cwd,env:this.env,input:chunk,signal,timeout:180000}));
+    let data;try{data=JSON.parse(response.stdout);}catch{throw new Error('Claude Code hat keine gültige vollständige JSON-Antwort geliefert.');}
+    if(response.code!==0 || data.type!=='result' || data.subtype!=='success' || data.is_error!==false || typeof data.result!=='string' || !data.result.trim() || data.result.length>200000 || data.permission_denials?.length || data.stop_reason==='max_tokens') {
+      const message=typeof data.result==='string'?data.result:'';
+      const category=/usage.?limit|rate.?limit|limit reached|hit your limit|resets/i.test(message)?'usage_limit':/unknown option|unsupported option|invalid.*(?:argument|option|flag)/i.test(message)?'cli_options':/api.?key|billing|credit/i.test(message)?'billing':/not logged|log.?in|authentication|oauth/i.test(message)?'authentication':/permission|denied/i.test(message)?'policy':/network|connection|ENOTFOUND|fetch failed/i.test(message)?'network':'incomplete_result';
+      const error=new Error(category==='usage_limit'?'Claude-Planlimit erreicht. Bitte die Nutzung direkt in Claude Code prüfen. Keine API-Ausweichroute verwendet.':'Claude Code hat diesen Teil nicht vollständig abgeschlossen. Bitte Planlimit oder Anmeldung im offiziellen CLI prüfen. Keine API-Ausweichroute verwendet.');
+      error.diagnostics={exitCode:response.code,category,resultType:data.type==='result'?'result':'other',successSubtype:data.subtype==='success',isError:data.is_error===true,resultCharacters:message.length,permissionDenials:Array.isArray(data.permission_denials)?data.permission_denials.length:0};
+      throw error;
+    }
+    return data.result.trim();
   }
 }

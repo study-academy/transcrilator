@@ -1,16 +1,20 @@
 const $ = id => document.getElementById(id);
 let csrf='', defaultPrompt=$('default-prompt').content.textContent, connected=false, running=false, controller=null;
 let promptInitialized=false, promptEditing=false;
-const promptStorageKey='translator.customPrompt';
-let provider='chatgpt', claudeState=null, providerSupport=false;
+const promptStorageKey='translator.customPrompt', providerStorageKey='translator.provider';
+const usageLinks={chatgpt:'https://chatgpt.com/settings/usage',claude:'https://claude.ai/settings/usage'};
+// Claude is the default; an explicit choice is remembered per browser.
+let provider='claude', claudeState=null, providerSupport=false;
+try{const saved=localStorage.getItem(providerStorageKey);if(saved==='chatgpt'||saved==='claude')provider=saved;}catch{}
+$('provider').value=provider;
 let maxText=500000, authWindow=null, awaitingAuth=false, language='english';
 window.addEventListener('focus',()=>{if(awaitingAuth && !running)init();});
 function status(message='', error=false) {
   $('status').textContent=message;
   $('status').className=error?'error':'';
-  if(error && message.includes('Nutzungslimit')) {
+  if(error && (message.includes('Nutzungslimit') || message.includes('Planlimit'))) {
     const link=document.createElement('a');
-    link.href='https://chatgpt.com/settings/usage';link.target='_blank';link.rel='noreferrer';link.textContent='Nutzung verwalten';
+    link.href=message.includes('Claude')?usageLinks.claude:usageLinks.chatgpt;link.target='_blank';link.rel='noreferrer';link.textContent='Nutzung verwalten';
     $('status').append(' ',link);
   }
 }
@@ -57,10 +61,16 @@ $('language-switch').onkeydown=event=>{
 function applyProvider() {
   $('chatgpt-settings').hidden=provider==='claude';
   $('provider-hint').textContent=provider==='claude'?(claudeState?.reason || 'Claude ist noch nicht verfügbar.'):providerSupport?'':'Claude wird nach dem nächsten Serverstart verfügbar. Die laufende App wird dafür nicht automatisch neu gestartet.';
-  $('plan').hidden=provider!=='chatgpt' || !connected;
+  $('plan-name').textContent=provider==='claude'?'Claude-Plan':'ChatGPT-Plan';
+  $('plan-link').href=usageLinks[provider];
+  $('plan').hidden=provider==='chatgpt'?!connected:!claudeState?.ready;
   update();
 }
-$('provider').onchange=()=>{provider=$('provider').value;applyProvider();};
+$('provider').onchange=()=>{
+  provider=$('provider').value;
+  try{localStorage.setItem(providerStorageKey,provider);}catch{}
+  applyProvider();
+};
 async function init() {
   try {
     const state=await api('/api/status');csrf=state.csrf;maxText=state.maxText;
@@ -70,6 +80,7 @@ async function init() {
     }
     try{const providers=await api('/api/providers');claudeState=providers.claude;providerSupport=true;}catch{providerSupport=false;claudeState=null;}
     $('claude-option').disabled=!providerSupport;
+    if(!providerSupport && provider==='claude'){provider='chatgpt';$('provider').value=provider;}
     const wasConnected=connected;connected=state.connected;
     if(connected && !wasConnected)status();
     if(connected || state.error)awaitingAuth=false;
