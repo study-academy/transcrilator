@@ -206,6 +206,7 @@ $('reset').onclick=()=>{
   setOutput('');status('Standardprompt wiederhergestellt.');update();
 };
 for(const id of ['source','prompt'])$(id).oninput=()=>{
+  if(id==='source'){mediaSeconds=null;formatOverride=null;lastFileName=null;}
   let promptSaved=true;
   if(id==='prompt'){try{sessionStorage.setItem(promptStorageKey,$('prompt').value);}catch{promptSaved=false;}}
   setOutput('');
@@ -232,14 +233,18 @@ function appendInline(parent,text,depth=0) {
   }
   parent.append(document.createTextNode(text.slice(position)));
 }
-function setOutput(text) {
-  $('output').value=text;$('output-view').replaceChildren();
-  if(!text)return;
+// Renders a translation into safe paragraphs; also used for history entries that are not on screen.
+function renderParagraphs(text,target=document.createElement('div')) {
+  target.replaceChildren();
+  if(!text)return target;
   for(const paragraph of text.replace(/\r\n/g,'\n').split(/\n[ \t]*\n/)) {
-    const element=document.createElement('p');appendInline(element,paragraph);$('output-view').append(element);
+    const element=document.createElement('p');appendInline(element,paragraph);target.append(element);
   }
+  return target;
 }
-function plainOutput(){return [...$('output-view').children].map(element=>element.textContent).join('\n\n');}
+function setOutput(text) {$('output').value=text;renderParagraphs(text,$('output-view'));if(!text)$('format-line').hidden=true;}
+const plainText=view=>[...view.children].map(element=>element.textContent).join('\n\n');
+function plainOutput(){return plainText($('output-view'));}
 let toastTimer=null;
 function toast(message) {
   clearTimeout(toastTimer);
@@ -247,13 +252,58 @@ function toast(message) {
   requestAnimationFrame(()=>$('toast').classList.add('visible'));
   toastTimer=setTimeout(()=>{$('toast').classList.remove('visible');toastTimer=setTimeout(()=>{$('toast').hidden=true;},250);},1800);
 }
-async function writeClipboard() {
-  const text=plainOutput();
+// Shortform (under 3 minutes) is copied in the Studyacademy Copywriting Board layout: one scene per row,
+// the hook first and the script right after it. Pasted into the last hook row, the two hook rows above
+// stay free for ad hook variants. Duration comes from the video, or ~150 spoken words per minute.
+const SHORTFORM_SECONDS=180, WORDS_PER_MINUTE=150;
+let mediaSeconds=null, formatOverride=null;
+// Length of the current script and how it was found: the video itself, timestamps in a pasted
+// transcript (YouTube style "4:12"), or an estimate from the word count.
+function scriptLength(source=$('source').value) {
+  if(mediaSeconds!==null)return {seconds:mediaSeconds,basis:'video'};
+  const stamps=[...source.matchAll(/(?<![\d:])(?:(\d{1,2}):)?([0-5]?\d):([0-5]\d)(?![\d:])/g)].map(m=>(+(m[1]||0))*3600+(+m[2])*60+(+m[3]));
+  if(stamps.length>=3)return {seconds:Math.max(...stamps),basis:'timestamps'};
+  const words=source.replace(/(?<![\d:])(?:\d{1,2}:)?\d{1,2}:\d{2}(?![\d:])/g,' ').trim().split(/\s+/).filter(Boolean).length;
+  return {seconds:words/WORDS_PER_MINUTE*60,basis:'estimate'};
+}
+const formatOf=seconds=>formatOverride || (seconds<SHORTFORM_SECONDS?'short':'long');
+const scriptSeconds=()=>scriptLength().seconds;
+const clock=seconds=>`${Math.floor(seconds/60)}:${String(Math.round(seconds%60)).padStart(2,'0')}`;
+// One sentence per scene, independent of how the model split paragraphs; very short sentences
+// ("Warum?", "Ganz einfach:") join the next one so every row carries a complete thought.
+const MIN_SCENE_WORDS=5;
+const sentenceSegmenter=new Intl.Segmenter('de',{granularity:'sentence'});
+function boardRows(output) {
+  const text=output.replace(/\*\*\*|\*\*|__|(?<![\p{L}\p{N}])[*_]|[*_](?![\p{L}\p{N}])/gu,'');
+  const sentences=[...sentenceSegmenter.segment(text)].map(part=>part.segment.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const rows=[];let carry='';
+  for(const sentence of sentences) {
+    const scene=carry?`${carry} ${sentence}`:sentence;
+    if(scene.split(' ').length<MIN_SCENE_WORDS){carry=scene;continue;}
+    rows.push(scene);carry='';
+  }
+  if(carry)rows.length?rows[rows.length-1]+=` ${carry}`:rows.push(carry);
+  return rows;
+}
+const escapeHtml=text=>text.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// The clipboard content for one translation: board rows for shortform, formatted paragraphs otherwise.
+function payloadFor({output,kind}) {
+  if(kind==='long'){const view=renderParagraphs(output);return {text:plainText(view),html:view.innerHTML,board:false};}
+  const rows=boardRows(output);
+  // Voice Over spans the merged columns C to F. A plain multi-row paste would unmerge them, so every
+  // row brings its own four-column cell in the board's cell style (Arial 10, wrapped, top aligned).
+  const cell='font-family:Arial;font-size:10pt;vertical-align:top;white-space:normal;word-wrap:break-word;wrap-strategy:4;overflow:hidden;padding:6px 8px;border:1px solid #d8d8d8';
+  const html=`<meta charset="utf-8"><table style="border-collapse:collapse"><tbody>${rows.map(row=>`<tr><td colspan="4" style="${cell}">${escapeHtml(row)}</td></tr>`).join('')}</tbody></table>`;
+  return {text:rows.join('\n'),html,board:true};
+}
+const clipboardPayload=()=>payloadFor({output:$('output').value,kind:formatOf(scriptSeconds())});
+const copiedMessage=board=>board?'Fürs Copywriting Board kopiert':'In die Zwischenablage kopiert';
+async function writeClipboard({text,html}) {
   // Desktop app: native clipboard via the preload bridge, independent of window focus.
-  if(window.transcrilatorDesktop){await window.transcrilatorDesktop.copy(text,$('output-view').innerHTML);return;}
+  if(window.transcrilatorDesktop){await window.transcrilatorDesktop.copy(text,html);return;}
   if(typeof ClipboardItem==='function' && navigator.clipboard.write) {
     try {
-      await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([$('output-view').innerHTML],{type:'text/html'})})]);
+      await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([html],{type:'text/html'})})]);
       return;
     } catch {}
   }
@@ -263,8 +313,10 @@ async function writeClipboard() {
 async function copy({automatic=false}={}) {
   if(!$('output').value)return;
   try {
-    await writeClipboard();
-    toast('In die Zwischenablage kopiert');
+    const payload=clipboardPayload();
+    await writeClipboard(payload);
+    toast(copiedMessage(payload.board));
+    showFormat();
   } catch {
     if(automatic)return;
     const range=document.createRange();range.selectNodeContents($('output-view'));
@@ -272,6 +324,81 @@ async function copy({automatic=false}={}) {
     status('Bitte den markierten Text mit ⌘C oder Strg+C kopieren.');
   }
 }
+// After a translation the status line names the detected format; one click switches it and recopies.
+function showFormat() {
+  if(!$('output').value){$('format-line').hidden=true;return;}
+  const {seconds,basis}=scriptLength(), kind=formatOf(seconds);
+  const length=`${basis==='estimate'?'ca. ':''}${clock(seconds)} Min`;
+  $('format-text').textContent=kind==='short'?`Shortform · ${length} · in die letzte Hook-Zeile einfügen`:`Longform · ${length}`;
+  $('format-switch').textContent=kind==='short'?'Als Longform kopieren':'Als Shortform kopieren';
+  $('format-line').hidden=false;
+}
+$('format-switch').onclick=async()=>{
+  formatOverride=formatOf(scriptSeconds())==='short'?'long':'short';
+  updateHistoryKind(formatOverride);
+  await copy();
+};
+// History: the last translations stay on this device only (local app storage) so any of them can be
+// copied again in its format. Only the German result and a short title are kept, never the audio.
+const historyStorageKey='translator.history', HISTORY_LIMIT=30;
+let lastFileName=null;
+function readHistory(){try{const list=JSON.parse(localStorage.getItem(historyStorageKey)||'[]');return Array.isArray(list)?list:[];}catch{return [];}}
+function writeHistory(list) {
+  // Long scripts can fill the storage; drop the oldest entries until it fits.
+  for(;;) {
+    try{localStorage.setItem(historyStorageKey,JSON.stringify(list));return;}
+    catch{if(list.length<=1)return;list=list.slice(0,-1);}
+  }
+}
+function saveHistory() {
+  // Titles skip transcript markers like [Music] and timestamps.
+  const source=$('source').value.replace(/\[[^\]]{1,30}\]/g,' ').replace(/(?<![\d:])(?:\d{1,2}:)?\d{1,2}:\d{2}(?![\d:])/g,' ').trim(), {seconds}=scriptLength();
+  const title=lastFileName || source.split(/\s+/).slice(0,8).join(' ')+(source.split(/\s+/).length>8?' …':'');
+  const entry={id:Date.now(),date:new Date().toISOString(),title,output:$('output').value,seconds,kind:formatOf(seconds)};
+  writeHistory([entry,...readHistory()].slice(0,HISTORY_LIMIT));
+  renderHistory();
+}
+function updateHistoryKind(kind) {
+  const list=readHistory();
+  if(list[0] && list[0].output===$('output').value){list[0].kind=kind;writeHistory(list);renderHistory();}
+}
+function renderHistory() {
+  const list=readHistory();
+  $('history-empty').hidden=list.length>0;$('history-clear').hidden=!list.length;
+  $('history-list').replaceChildren(...list.map(entry=>{
+    const item=document.createElement('li'), button=document.createElement('button');
+    button.type='button';button.className='history-item';
+    const title=document.createElement('span');title.className='history-title';title.textContent=entry.title||'Ohne Titel';
+    const meta=document.createElement('span');meta.className='history-meta';
+    const when=new Date(entry.date).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    meta.textContent=`${when} · ${entry.kind==='short'?'Shortform':'Longform'} · ${clock(entry.seconds||0)} Min`;
+    button.append(title,meta);
+    button.setAttribute('aria-label',`${entry.title}, ${meta.textContent}, kopieren`);
+    button.onclick=async()=>{
+      try{const payload=payloadFor(entry);await writeClipboard(payload);toast(copiedMessage(payload.board));}
+      catch{status('Kopieren nicht möglich. Bitte erneut versuchen.',true);}
+    };
+    item.append(button);return item;
+  }));
+}
+$('history-clear').onclick=()=>{try{localStorage.removeItem(historyStorageKey);}catch{}renderHistory();};
+renderHistory();
+// Only a plain-text estimate close to the 3-minute line is unclear (speaking pace varies roughly
+// 130 to 180 words per minute); then the user picks the format once before translating.
+const UNCLEAR_SECONDS=[120,240];
+function formatUnclear() {
+  const {seconds,basis}=scriptLength();
+  return !formatOverride && basis==='estimate' && seconds>=UNCLEAR_SECONDS[0] && seconds<=UNCLEAR_SECONDS[1];
+}
+function startTranslation() {
+  if($('format-choice').open)return;
+  if(!formatUnclear())return translate();
+  $('format-choice').showModal();
+}
+// The buttons act on click directly; the dialog's close event can be deferred while the window is hidden.
+for(const button of $('format-choice').querySelectorAll('[data-format]'))button.onclick=()=>{
+  formatOverride=button.dataset.format;$('format-choice').close();translate();
+};
 // Progress veil: playful phrases about what happens to the script, each acted out by the scribble,
 // plus a bar that creeps towards the next milestone. It lasts exactly as long as the request.
 const PHRASES=[
@@ -366,12 +493,13 @@ async function transcribeFile(file) {
   setOutput('');status();showLanguage('english');update();
   startProgress(LISTEN_PHRASES);
   $('progress-detail').hidden=false;$('progress-detail').textContent='Lese die Tonspur';
-  let text='';
+  let text='',audioSeconds=null;
   try {
     const audio=await decodeAudio(file);
     signal.throwIfAborted();
     if(!audio.length)throw new Error('Die Datei enthält keine Tonspur.');
     progressStep(0.04,0.1);
+    audioSeconds=audio.length/16000;
     text=await runWhisper(audio,signal);
   } catch(error) {
     stopProgress();running=false;controller=null;
@@ -379,6 +507,7 @@ async function transcribeFile(file) {
   }
   stopProgress();running=false;controller=null;
   $('source').value=text;$('source').dispatchEvent(new Event('input'));
+  mediaSeconds=audioSeconds;lastFileName=file.name;
   // Straight on to German when a provider is ready; otherwise the English transcript waits in the field.
   if(!$('action').disabled)return translate();
   status('Englisches Transkript fertig. Zum Übersetzen einen Anbieter verbinden.');update();
@@ -423,6 +552,7 @@ async function translate() {
     // The German view only appears once the whole translation is complete.
     stopProgress();
     status();showLanguage('german');
+    saveHistory();
     await copy({automatic:true});
   } catch(error) {
     stopProgress();
@@ -433,7 +563,7 @@ async function translate() {
 $('action').onclick=()=>{
   if(running){controller?.abort();return;}
   if(language==='german')return copy();
-  if(!$('action').disabled)return translate();
+  if(!$('action').disabled)return startTranslation();
 };
 // Keyboard: Cmd/Ctrl+Enter runs the main action, Cmd/Ctrl+Backspace clears, Cmd/Ctrl+, opens settings,
 // Shift+Tab (main area only), Ctrl+Tab or Cmd+Shift+[ ] switch language (Cmd+Tab belongs to macOS).
@@ -473,8 +603,9 @@ document.addEventListener('copy',event=>{
   if(!window.getSelection().isCollapsed)return;
   if(!$('output').value)return;
   event.preventDefault();
-  event.clipboardData.setData('text/plain',plainOutput());
-  event.clipboardData.setData('text/html',$('output-view').innerHTML);
-  toast('In die Zwischenablage kopiert');
+  const {text,html,board}=clipboardPayload();
+  event.clipboardData.setData('text/plain',text);
+  event.clipboardData.setData('text/html',html);
+  toast(copiedMessage(board));
 });
 init();

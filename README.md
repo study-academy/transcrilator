@@ -64,6 +64,21 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
 
+## Copywriting Board (Shortform und Ads)
+
+Ist ein Skript kürzer als 3 Minuten (Shortform), kopiert die App es im Format des Studyacademy Copywriting Boards: eine Szene pro Zeile, die Hook zuerst, das Skript direkt dahinter, ohne Formatierungszeichen. In Google Sheets oder Excel in die letzte Hook-Zeile der Spalte „Voice Over“ klicken (zum Beispiel C15) und ⌘ V drücken; jede Szene landet in ihrer eigenen Zeile, die verbundenen Zellen und das Zellformat bleiben erhalten. Die beiden Hook-Zeilen darüber bleiben für Ad-Hook-Varianten frei. Längeres (Longform, ab 3 Minuten) wird als normaler Text mit Absätzen kopiert.
+
+So wird die Länge bestimmt:
+- transkribiertes Video: echte Länge der Tonspur
+- eingefügtes Transkript mit Zeitstempeln (z. B. YouTube „4:12“): letzter Zeitstempel
+- reiner Text: Schätzung mit 150 gesprochenen Wörtern pro Minute; liegt sie zwischen 2 und 4 Minuten, fragt die App vor dem Übersetzen einmal „Shortform oder Longform?“
+
+Unter den Buttons steht nach der Übersetzung das erkannte Format; „Als Longform/Shortform kopieren“ stellt es um und kopiert neu.
+
+## Verlauf
+
+In den Einstellungen unter „Verlauf“ stehen die letzten 30 Übersetzungen mit Datum, Format und Länge. Ein Klick kopiert sie erneut im passenden Format. Gespeichert werden nur die deutsche Übersetzung, ein kurzer Titel und die Länge, ausschließlich lokal auf dem Rechner; „Verlauf löschen“ entfernt alles.
+
 ## Video lokal transkribieren
 
 Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM) in die Karte ziehen oder mit ⌘ O auswählen. Die App liest die Tonspur aus, Whisper (`onnx-community/whisper-small.en`, englisch) erstellt daraus lokal das englische Transkript, und danach übersetzt der gewählte Anbieter automatisch ins Deutsche.
