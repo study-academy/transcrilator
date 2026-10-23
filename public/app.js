@@ -212,6 +212,8 @@ function toast(message) {
 }
 async function writeClipboard() {
   const text=plainOutput();
+  // Desktop app: native clipboard via the preload bridge, independent of window focus.
+  if(window.transcrilatorDesktop){await window.transcrilatorDesktop.copy(text,$('output-view').innerHTML);return;}
   if(typeof ClipboardItem==='function' && navigator.clipboard.write) {
     try {
       await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([$('output-view').innerHTML],{type:'text/html'})})]);
@@ -227,46 +229,54 @@ async function copy({automatic=false}={}) {
     await writeClipboard();
     toast('In die Zwischenablage kopiert');
   } catch {
-    if(automatic){status('Fertig. Mit „Kopieren“ in die Zwischenablage übernehmen.');return;}
+    if(automatic)return;
     const range=document.createRange();range.selectNodeContents($('output-view'));
     const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);$('output-view').focus();
     status('Bitte den markierten Text mit ⌘C oder Strg+C kopieren.');
   }
 }
-// Progress veil: phase text plus a bar that creeps towards the next milestone so long chunks still feel alive.
-const progress={target:0,shown:0,cap:0,timer:null};
-function progressText(text) {
-  if($('progress-text').textContent===text)return;
+// Progress veil: playful phrases about what happens to the script, each acted out by the scribble,
+// plus a bar that creeps towards the next milestone. It lasts exactly as long as the request.
+const PHRASES=[
+  ['Kitzle die Pointen heraus','sparkle'],['Bügle die Absätze glatt','iron'],['Sortiere die Gedanken','sort'],
+  ['Schicke [Musik] nach Hause','sweep'],['Fädle deutsche Sätze auf','type'],['Poliere die Überschriften','sparkle'],
+  ['Fette die Überschriften an','bold'],['Lege Aha-Momente schräg','slant'],['Streiche Füllwörter mit Gefühl','sweep'],
+  ['Mache aus „Hey“ ein „Hallo“','type'],['Zähle heimlich die Kommas','bounce'],['Gönne den Absätzen eine Pause','iron'],
+  ['Suche das eine richtige Wort','sparkle'],['Bringe die Sätze in Reih und Glied','sort'],['Übersetze ohne zu schummeln','type'],
+  ['Wecke müde Verben auf','bounce'],['Lasse Anglizismen höflich los','sweep'],['Rücke Kernsätze ins rechte Licht','slant']
+];
+const progress={target:0,shown:0,cap:0,timer:null,phraseTimer:null,order:[],next:0};
+function showPhrase() {
+  if(progress.next>=progress.order.length){progress.order=[...PHRASES].sort(()=>Math.random()-0.5);progress.next=0;}
+  const [text,anim]=progress.order[progress.next++];
   $('progress-text').classList.add('swap');
-  setTimeout(()=>{$('progress-text').textContent=text;$('progress-text').classList.remove('swap');},140);
+  setTimeout(()=>{$('progress-text').textContent=text;$('scribble').dataset.anim=anim;$('progress-text').classList.remove('swap');},140);
 }
-function progressStep(text,target,cap=target) {
-  progressText(text);progress.target=Math.max(progress.target,target);progress.cap=Math.max(cap,progress.target);
-}
-function startProgress(name) {
-  Object.assign(progress,{target:0,shown:0,cap:0});
-  $('progress-fill').style.transform='scaleX(0)';$('progress-text').textContent='';
-  $('progress').hidden=false;requestAnimationFrame(()=>$('progress').classList.add('visible'));
-  progressStep(`${name} wird vorbereitet`,0.04,0.1);
+function progressStep(target,cap=target){progress.target=Math.max(progress.target,target);progress.cap=Math.max(cap,progress.target);}
+function startProgress() {
+  Object.assign(progress,{target:0,shown:0,cap:0,next:progress.order.length});
+  $('progress-fill').style.transform='scaleX(0)';$('progress-detail').hidden=true;
+  showPhrase();$('progress').hidden=false;requestAnimationFrame(()=>$('progress').classList.add('visible'));
+  progressStep(0.04,0.1);
+  progress.phraseTimer=setInterval(showPhrase,2400);
   progress.timer=setInterval(()=>{
     progress.shown=Math.max(progress.target,progress.shown+(progress.cap-progress.shown)*0.04);
     $('progress-fill').style.transform=`scaleX(${progress.shown.toFixed(3)})`;
   },300);
 }
 function chunkProgress({done,total}) {
-  const share=done/total, next=(done+1)/total;
-  if(done<total)progressStep(total===1?'Übersetze den Text':`Übersetze ${total} Teile · ${done} fertig`,0.1+0.8*share,0.1+0.8*next-0.02);
-  else progressStep('Setze die Übersetzung zusammen',0.94,0.98);
+  if(total>1){$('progress-detail').hidden=false;$('progress-detail').textContent=`${done} von ${total} Teilen fertig`;}
+  progressStep(done<total?0.1+0.8*done/total:0.94,done<total?0.1+0.8*(done+1)/total-0.02:0.98);
 }
-async function stopProgress(finished) {
-  clearInterval(progress.timer);
-  if(finished){$('progress-fill').style.transform='scaleX(1)';progressText('Fertig');await new Promise(r=>setTimeout(r,450));}
+// No artificial pause: the veil goes the moment the request ends; its fade runs on its own.
+function stopProgress() {
+  clearInterval(progress.timer);clearInterval(progress.phraseTimer);
   $('progress').classList.remove('visible');
-  await new Promise(r=>setTimeout(r,180));$('progress').hidden=true;
+  setTimeout(()=>{if(!running)$('progress').hidden=true;},180);
 }
 async function translate() {
   running=true;controller=new AbortController();setOutput('');status();update();
-  startProgress(provider==='claude'?'Claude':'ChatGPT');
+  startProgress();
   let completed=false;
   try {
     const response=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json','X-Local-CSRF':csrf},signal:controller.signal,body:JSON.stringify({provider,text:$('source').value,prompt:$('prompt').value,model:$('model').value})});
@@ -290,11 +300,11 @@ async function translate() {
     buffer+=decoder.decode();if(buffer.trim())event(buffer);
     if(!completed)throw new Error('Verbindung abgebrochen. Keine vollständige Übersetzung erhalten.');
     // The German view only appears once the whole translation is complete.
-    await stopProgress(true);
+    stopProgress();
     status();showLanguage('german');
     await copy({automatic:true});
   } catch(error) {
-    await stopProgress(false);
+    stopProgress();
     setOutput('');status(error.name==='AbortError'?'Abgebrochen. Keine vollständige Übersetzung erstellt.':error.message,true);
     controller?.abort();if(error.name!=='AbortError')await init();
   } finally {running=false;controller=null;update();}

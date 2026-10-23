@@ -12,7 +12,7 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js && node --check desktop/main.js",
+    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js && node --check desktop/main.js && node --check desktop/preload.cjs",
     "desktop": "electron .",
     "dist:mac": "electron-builder --mac --arm64 --x64"
   },
