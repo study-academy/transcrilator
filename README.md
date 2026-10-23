@@ -9,9 +9,25 @@ Lokaler Englisch-Deutsch-Übersetzer für Transkripte. Fügt ein englisches Tran
 
 Es gibt keinen eigenen App-Login, keine API-Key-Eingabe und keine API-Ausweichroute. MIT-lizenziert.
 
+## Installation mit Claude Code (empfohlen fürs Team)
+
+Diesen Prompt in Claude Code einfügen. Claude Code lädt dann die neueste Version, installiert sie und führt durch die Anmeldung:
+
+```text
+Installiere mir bitte die Desktop-App „Transcrilator“ von https://github.com/study-academy/transcrilator und führe mich durch die Einrichtung. Antworte auf Deutsch und erkläre jeden Schritt kurz.
+
+1. Prüfe, dass ich macOS auf Apple Silicon nutze (`uname -m` muss arm64 ergeben). Bei einem Intel-Mac brich ab und verweise auf die Browser-Variante im README.
+2. Lade die neueste Version: https://github.com/study-academy/transcrilator/releases/latest/download/Transcrilator-macOS-arm64.dmg nach ~/Downloads. Hole dir den erwarteten SHA-256-Wert dieser Datei aus https://api.github.com/repos/study-academy/transcrilator/releases/latest (Feld `digest` des Assets) und vergleiche ihn mit `shasum -a 256`. Stimmt er nicht, brich ab.
+3. Hänge die DMG ein, kopiere Transcrilator.app nach /Applications (eine vorhandene Transcrilator.app vorher nach Rückfrage ersetzen) und werfe die DMG wieder aus.
+4. Prüfe, ob das Claude-Code-Kommandozeilenprogramm verfügbar ist (`command -v claude`). Falls nicht, installiere es mit dem offiziellen Befehl `curl -fsSL https://claude.ai/install.sh | bash`.
+5. Prüfe mit `claude auth status`, ob ich mit meinem eigenen Claude-Abo angemeldet bin (loggedIn true und authMethod "claude.ai"). Falls nicht: Ich soll in meinem eigenen Terminal `claude auth login --claudeai` ausführen und mich im Browser mit meinem Abo anmelden. Melde mich nicht selbst an, lies keine Tokens und richte keinen API-Key ein. Prüfe danach den Status erneut.
+6. Öffne die App mit `open -a Transcrilator`. Falls macOS sie blockiert, erkläre mir: Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“.
+7. Sag mir zum Schluss: In den Einstellungen (⌘ ,) sollte bei Claude ein grüner Punkt stehen. Text mit ⌘ V einfügen, mit ⌘ ↩ übersetzen; das Ergebnis landet automatisch in der Zwischenablage. ChatGPT ist optional über „Continue with ChatGPT“ in den Einstellungen.
+```
+
 ## Installation (macOS)
 
-1. Unter [Releases](../../releases/latest) `Transcrilator-<Version>-arm64.dmg` laden. Sie ist für Macs mit Apple Silicon (M1 und neuer). Für Intel-Macs gibt es vorerst keine fertige App; dort die Browser-Variante nutzen oder selbst mit `npm run dist:mac` bauen.
+1. [`Transcrilator-macOS-arm64.dmg`](https://github.com/study-academy/transcrilator/releases/latest/download/Transcrilator-macOS-arm64.dmg) laden (immer die neueste Version, für Macs mit Apple Silicon, M1 und neuer). Für Intel-Macs gibt es vorerst keine fertige App; dort die Browser-Variante nutzen oder selbst mit `npm run dist:mac` bauen.
 2. DMG öffnen und `Transcrilator` in den Ordner `Programme` ziehen.
 3. Die App ist nicht von Apple signiert. Beim ersten Start meldet macOS deshalb, dass die App nicht geöffnet werden kann. Dann einmalig: **Systemeinstellungen → Datenschutz & Sicherheit → nach unten scrollen → „Dennoch öffnen“** und mit dem eigenen Mac-Passwort bestätigen. Danach startet sie normal.
 
@@ -30,7 +46,7 @@ Wenn die App schon installiert ist und eine neue Version erscheint: neue DMG lad
    claude auth login --claudeai
    ```
    Die Anmeldung läuft vollständig in Anthropics eigenem Browser-Login. Die App sieht keine Passwörter oder Tokens.
-3. Transcrilator öffnen. Unter Einstellungen (Symbol oben mittig) zeigt der Anbieter-Schalter `Claude | ChatGPT` dann bei Claude einen grünen Punkt und darunter „Verbunden über dein Claude-Abo“. Gelb heißt: noch nicht mit dem Abo angemeldet; rot: Claude Code nicht gefunden. `Neu verbinden` öffnet auf dem Mac das Terminal mit dem offiziellen `claude auth login`; beim ersten Mal fragt macOS, ob Transcrilator das Terminal steuern darf.
+3. Transcrilator öffnen. Ist beim ersten Start noch kein Modell verbunden, öffnen sich die Einstellungen automatisch; später zeigt die leere Karte „Claude ist nicht verbunden“ mit `Jetzt verbinden`. Unter Einstellungen (Symbol oben mittig) zeigt der Anbieter-Schalter `Claude | ChatGPT` dann bei Claude einen grünen Punkt und darunter „Verbunden über dein Claude-Abo“. Gelb heißt: noch nicht mit dem Abo angemeldet; rot: Claude Code nicht gefunden. `Neu verbinden` öffnet auf dem Mac das Terminal mit dem offiziellen `claude auth login`; beim ersten Mal fragt macOS, ob Transcrilator das Terminal steuern darf.
 
 Die App akzeptiert nur die Abo-Anmeldung (`claude.ai`). Ein API-Key, Bedrock/Vertex oder fremde Zugangsdaten werden nicht verwendet, und kostenrelevante Umgebungsvariablen werden nicht an Claude Code weitergegeben. Übersetzungen zählen gegen das Nutzungslimit des eigenen Abos. Jede Person braucht ein eigenes Abo; Zugänge dürfen nicht geteilt werden.
 

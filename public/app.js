@@ -92,7 +92,34 @@ function applyProvider() {
   $('settings-toggle').title=`Einstellungen · ${provider==='claude'?'Claude':'ChatGPT'} · ${level==='green'?'Verbunden':'Nicht verbunden'}`;
   // OpenAI requires the plan notice near the composer while ChatGPT plan usage is active; Claude needs none.
   $('plan').hidden=provider!=='chatgpt' || !connected;
+  showConnectionError(level);
   update();
+}
+// While the selected provider is not usable, the empty card shows why instead of the placeholder.
+// Nothing shows while Claude is still being checked, so the message never flashes on start.
+function showConnectionError(level) {
+  const checking=provider==='claude' && providerSupport && !claudeState;
+  const missing=!checking && level!=='green';
+  document.querySelector('.editor-wrap').dataset.connection=missing?'missing':'ok';
+  $('connect-error').hidden=!missing;
+  if(!missing)return;
+  const name=provider==='claude'?'Claude':'ChatGPT';
+  const text=provider==='claude' && claudeState && !claudeState.installed?'Claude Code ist nicht installiert.'
+    :provider==='chatgpt' && awaitingAuth?'ChatGPT-Anmeldung läuft …':`${name} ist nicht verbunden.`;
+  $('connect-error-text').textContent=text;
+  $('connect-error-action').hidden=provider==='chatgpt' && awaitingAuth;
+}
+$('connect-error-action').onclick=()=>$('settings').showPopover();
+// First start without any working connection: open the settings once so a model gets connected right away.
+const setupStorageKey='translator.setupShown';
+let setupChecked=false;
+function firstStartSetup() {
+  if(setupChecked || (provider==='claude' && providerSupport && !claudeState))return;
+  setupChecked=true;
+  let shown=null;try{shown=localStorage.getItem(setupStorageKey);}catch{}
+  if(shown || claudeState?.ready || connected)return;
+  try{localStorage.setItem(setupStorageKey,'1');}catch{}
+  $('settings').showPopover();
 }
 function selectProvider(next, focus=false) {
   provider=next;
@@ -140,7 +167,7 @@ async function init() {
       if(models.some(model=>model.slug===previous))$('model').value=previous;
       $('model').hidden=false;$('model-label').hidden=false;
     }
-  } catch(error) {status(error.message,true);} finally {applyProvider();}
+  } catch(error) {status(error.message,true);} finally {applyProvider();firstStartSetup();}
 }
 $('connect').onclick=()=>{
   if($('settings').matches(':popover-open'))$('settings').hidePopover();

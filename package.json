@@ -1,7 +1,7 @@
 {
   "name": "transcrilator",
   "productName": "Transcrilator",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Lokaler Englisch-Deutsch-Übersetzer für Transkripte. Nutzt das eigene Claude-Abo über Claude Code oder den eigenen ChatGPT-Plan.",
   "private": true,
   "type": "module",
@@ -45,7 +45,7 @@
         "zip"
       ],
       "identity": null,
-      "artifactName": "Transcrilator-${version}-${arch}.${ext}"
+      "artifactName": "Transcrilator-macOS-${arch}.${ext}"
     },
     "dmg": {
       "title": "Transcrilator ${version}"
