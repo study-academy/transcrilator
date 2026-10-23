@@ -64,6 +64,16 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 - `Clear` leert beide Seiten. Während der Übersetzung bricht der Button ab.
 - Der Übersetzungsprompt liegt unter Einstellungen → Prompt. Das Stift-Symbol schaltet die Bearbeitung frei, `Zurücksetzen` stellt den Standard wieder her.
 
+## Mehrere Skripte und Videos (Tabs)
+
+- Neuer Tab mit ⌘ T oder dem kleinen + rechts neben der Karte; zwischen Tabs wechseln mit ⌘ ← / ⌘ →. Gibt es auf der Seite noch keinen Tab, entsteht er dort.
+- Unter der Karte erscheinen Punkte, sobald es mehr als einen Tab gibt: grau gefüllt ist der aktive Tab, ein grauer Ring ein anderer. Ein Klick springt dorthin, beim Zeigen erscheint der Titel.
+- Leere Tabs räumen sich selbst auf, sobald man sie verlässt.
+- Mehrere Videos auf einmal in die Karte ziehen oder mit ⌘ O auswählen: Jedes bekommt einen Tab, sie werden nacheinander im Hintergrund transkribiert und übersetzt. Ein wartender Tab zeigt das an.
+- Mit einem Tab wird wie gewohnt automatisch kopiert; bei mehreren Tabs meldet ein kurzer Hinweis „Tab 2 fertig“, kopiert wird pro Tab mit ⌘ C oder `Kopieren`.
+- `Clear` (⌘ ⌫) bringt die App in den Ausgangszustand: eine leere Karte. Läuft noch etwas, fragt sie vorher. Fertige Übersetzungen stehen im Verlauf.
+- Das Video selbst wird nach der Transkription nicht aufbewahrt, nur sein Transkript.
+
 ## Copywriting Board (Shortform und Ads)
 
 Ist ein Skript kürzer als 3 Minuten (Shortform), kopiert die App es im Format des Studyacademy Copywriting Boards: eine Szene pro Zeile, die Hook zuerst, das Skript direkt dahinter, ohne Formatierungszeichen. In Google Sheets oder Excel in die letzte Hook-Zeile der Spalte „Voice Over“ klicken (zum Beispiel C15) und ⌘ V drücken; jede Szene landet in ihrer eigenen Zeile, die verbundenen Zellen und das Zellformat bleiben erhalten. Die beiden Hook-Zeilen darüber bleiben für Ad-Hook-Varianten frei. Längeres (Longform, ab 3 Minuten) wird als normaler Text mit Absätzen kopiert.
@@ -93,6 +103,8 @@ Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM)
 |---|---|
 | Übersetzen bzw. Kopieren (Hauptaktion) | ⌘ ↩ |
 | Video oder Audio lokal transkribieren | ⌘ O |
+| Neuer Tab | ⌘ T |
+| Zwischen Tabs wechseln | ⌘ ← / ⌘ → |
 | Text einfügen, ohne vorher ins Feld zu klicken | ⌘ V |
 | Fertige Übersetzung kopieren | ⌘ C |
 | Zwischen Englisch und Deutsch wechseln | ⇧ ⇥ (auch ⌃ ⇥ oder ⌘ ⇧ [ / ]) |
@@ -110,7 +122,7 @@ Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM)
 
 ## Browser-Variante und Entwicklung
 
-Voraussetzung: Node.js 24 oder neuer.
+Für die Desktop-App ist nichts weiter nötig: Electron und alles andere stecken bereits in der App. Nur wer die App aus dem Quellcode startet oder baut, braucht Node.js 24 oder neuer.
 
 ```sh
 npm start
