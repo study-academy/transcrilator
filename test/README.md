@@ -1,0 +1,3 @@
+Tests exercise three task surfaces: lossless chunking and completion; OAuth with signed synthetic tokens; actual local HTTP requests and frontend behavior. All model/OAuth tests use synthetic data and an injected network adapter. Production has no mock flag or fake fallback.
+
+`npm test` runs the automated tests. `node test/browser-fixture.mjs` starts an isolated browser fixture on 127.0.0.1:4318 with a synthetic authenticated session. It never contacts OpenAI. The model is visibly labeled Testfixture (keine KI). Input FAIL produces HTTP 429; CUT produces an incomplete stream; SLOW permits cancellation testing. Other input yields fixed synthetic text. Stop with Ctrl+C. Do not use it for translation.
