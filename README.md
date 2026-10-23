@@ -55,10 +55,11 @@ Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden v
 | Übersetzen bzw. Kopieren (Hauptaktion) | ⌘ ↩ |
 | Text einfügen, ohne vorher ins Feld zu klicken | ⌘ V |
 | Fertige Übersetzung kopieren | ⌘ C |
-| Zwischen Englisch und Deutsch wechseln | ⌃ Tab oder ⌘ ⇧ [ / ] |
+| Zwischen Englisch und Deutsch wechseln | ⇧ ⇥ (auch ⌃ ⇥ oder ⌘ ⇧ [ / ]) |
+| Alles leeren (Clear) | ⌘ ⌫ |
 | Einstellungen öffnen | ⌘ , |
 
-⌘ Tab gehört macOS für den Programmwechsel und kann von keiner App genutzt werden. Die Übersicht steht auch in den Einstellungen hinter dem ⌘-Symbol; beim kurzen Zeigen mit der Maus erscheint der jeweilige Kurzbefehl klein unter dem Element. Unter Windows und Linux gilt Strg statt ⌘. In der Browser-Variante kann der Browser einzelne Kurzbefehle wie ⌃ Tab selbst belegen.
+⌘ Tab gehört macOS für den Programmwechsel und kann von keiner App genutzt werden. Die Übersicht steht auch in den Einstellungen hinter dem ⌘-Symbol; beim kurzen Zeigen mit der Maus erscheint der jeweilige Kurzbefehl klein unter dem Element. Unter Windows und Linux gilt Strg statt ⌘. In den Einstellungen und Dialogen behält ⇧ ⇥ seine übliche Rolle (zum vorherigen Element springen). In der Browser-Variante kann der Browser einzelne Kurzbefehle wie ⌃ ⇥ selbst belegen.
 
 ## Grenzen und Verlässlichkeit
 

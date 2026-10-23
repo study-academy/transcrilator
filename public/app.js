@@ -322,16 +322,21 @@ $('action').onclick=()=>{
   if(language==='german')return copy();
   if(!$('action').disabled)return translate();
 };
-// Keyboard: Cmd/Ctrl+Enter runs the main action, Cmd/Ctrl+, opens settings, Ctrl+Tab or Cmd+Shift+[ ]
-// switches language (Cmd+Tab itself belongs to macOS). Paste and copy work without focusing a field first.
+// Keyboard: Cmd/Ctrl+Enter runs the main action, Cmd/Ctrl+Backspace clears, Cmd/Ctrl+, opens settings,
+// Shift+Tab (main area only), Ctrl+Tab or Cmd+Shift+[ ] switch language (Cmd+Tab belongs to macOS).
+// Paste and copy work without focusing a field first.
 const isField=element=>element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement || element instanceof HTMLSelectElement;
 document.addEventListener('keydown',event=>{
   const mod=event.metaKey||event.ctrlKey;
   if(mod&&event.key==='Enter'&&!$('action').disabled){event.preventDefault();$('action').click();return;}
   if(mod&&event.key===','){event.preventDefault();$('settings').togglePopover();return;}
+  const inOverlay=!!document.querySelector('dialog[open]') || $('settings').matches(':popover-open');
+  if(mod&&event.key==='Backspace'&&!inOverlay&&!$('clear').disabled){event.preventDefault();$('clear').click();return;}
+  // Shift+Tab keeps its usual focus role inside settings and dialogs.
+  const shiftTab=event.shiftKey&&!mod&&!event.altKey&&event.key==='Tab'&&!inOverlay;
   const tabSwitch=event.ctrlKey&&!event.metaKey&&event.key==='Tab';
   const bracketSwitch=event.metaKey&&event.shiftKey&&(event.code==='BracketLeft'||event.code==='BracketRight');
-  if((tabSwitch||bracketSwitch)&&!running&&!document.querySelector('dialog[open]')) {
+  if((shiftTab||tabSwitch||bracketSwitch)&&!running&&!document.querySelector('dialog[open]')) {
     event.preventDefault();
     showLanguage(language==='english'?'german':'english',true);
   }
