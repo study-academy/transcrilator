@@ -61,26 +61,32 @@ $('language-switch').onkeydown=event=>{
 function claudeStatus() {
   if(!providerSupport)return ['red','Nicht verfügbar'];
   if(!claudeState)return ['yellow','Wird geprüft …'];
-  if(claudeState.ready)return ['green','Verbunden'];
+  if(claudeState.ready)return ['green','Verbunden über dein Claude-Abo'];
   if(!claudeState.installed)return ['red','Claude Code nicht installiert'];
   if(claudeState.loggedIn)return ['yellow','Kein Claude-Abo-Login'];
   if(claudeState.authMethod==='none')return ['yellow','Nicht angemeldet'];
   return ['red','Nicht verfügbar'];
 }
 function chatgptStatus() {
-  if(connected)return ['green','Verbunden'];
+  if(connected)return ['green','Verbunden über deinen ChatGPT-Plan'];
   if(awaitingAuth)return ['yellow','Anmeldung läuft …'];
   return ['red','Nicht verbunden'];
 }
 function applyProvider() {
-  for(const name of ['claude','chatgpt'])$('pick-'+name).setAttribute('aria-checked',String(provider===name));
-  const [claudeLevel,claudeText]=claudeStatus(), [chatgptLevel,chatgptText]=chatgptStatus();
-  $('claude-dot').dataset.level=claudeLevel;$('claude-state').textContent=claudeText;
-  $('chatgpt-dot').dataset.level=chatgptLevel;$('connection').textContent=chatgptText;
-  $('disconnect').hidden=!connected;
+  const states={claude:claudeStatus(),chatgpt:chatgptStatus()};
+  $('providers').dataset.provider=provider;
+  for(const name of ['claude','chatgpt']) {
+    const pick=$('pick-'+name),[level,text]=states[name];
+    pick.setAttribute('aria-checked',String(provider===name));pick.tabIndex=provider===name?0:-1;pick.setAttribute('aria-label',`${name==='claude'?'Claude':'ChatGPT'}, ${text}`);
+    $(name+'-dot').dataset.level=level;
+  }
+  // One status line for the selected provider, with only the action that fits it.
+  $('provider-state').textContent=states[provider][1];
+  $('claude-reconnect').hidden=provider!=='claude';
+  $('connect').hidden=provider!=='chatgpt';$('disconnect').hidden=provider!=='chatgpt' || !connected;
   $('chatgpt-settings').hidden=provider!=='chatgpt' || !connected;
   $('provider-hint').textContent=provider==='claude' && claudeState && !claudeState.ready?claudeState.reason:'';
-  const level=provider==='claude'?claudeLevel:chatgptLevel;
+  const level=states[provider][0];
   $('settings-toggle').title=`Einstellungen · ${provider==='claude'?'Claude':'ChatGPT'} · ${level==='green'?'Verbunden':'Nicht verbunden'}`;
   // OpenAI requires the plan notice near the composer while ChatGPT plan usage is active; Claude needs none.
   $('plan').hidden=provider!=='chatgpt' || !connected;

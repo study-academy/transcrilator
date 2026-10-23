@@ -30,13 +30,13 @@ Wenn die App schon installiert ist und eine neue Version erscheint: neue DMG lad
    claude auth login --claudeai
    ```
    Die Anmeldung läuft vollständig in Anthropics eigenem Browser-Login. Die App sieht keine Passwörter oder Tokens.
-3. Transcrilator öffnen. Unter Einstellungen (Symbol oben mittig) zeigt Claude dann einen grünen Punkt und „Verbunden“. Gelb heißt: noch nicht mit dem Abo angemeldet; rot: Claude Code nicht gefunden. `Neu verbinden` öffnet auf dem Mac das Terminal mit dem offiziellen `claude auth login`; beim ersten Mal fragt macOS, ob Transcrilator das Terminal steuern darf.
+3. Transcrilator öffnen. Unter Einstellungen (Symbol oben mittig) zeigt der Anbieter-Schalter `Claude | ChatGPT` dann bei Claude einen grünen Punkt und darunter „Verbunden über dein Claude-Abo“. Gelb heißt: noch nicht mit dem Abo angemeldet; rot: Claude Code nicht gefunden. `Neu verbinden` öffnet auf dem Mac das Terminal mit dem offiziellen `claude auth login`; beim ersten Mal fragt macOS, ob Transcrilator das Terminal steuern darf.
 
 Die App akzeptiert nur die Abo-Anmeldung (`claude.ai`). Ein API-Key, Bedrock/Vertex oder fremde Zugangsdaten werden nicht verwendet, und kostenrelevante Umgebungsvariablen werden nicht an Claude Code weitergegeben. Übersetzungen zählen gegen das Nutzungslimit des eigenen Abos. Jede Person braucht ein eigenes Abo; Zugänge dürfen nicht geteilt werden.
 
 ## ChatGPT verwenden (optional)
 
-In den Einstellungen die Zeile `ChatGPT` antippen (blauer Haken = aktiver Anbieter) und `Continue with ChatGPT` wählen; derselbe Button verbindet später neu. Nach einer kurzen Erklärung öffnet sich die offizielle OpenAI-Anmeldung im Standardbrowser. Dort anmelden und die Plannutzung freigeben, danach zur App zurückwechseln. Die Wahl des Anbieters wird gemerkt. Solange ChatGPT genutzt wird, steht unter dem Arbeitsbereich der von OpenAI vorgeschriebene Hinweis „ChatGPT-Plan · Nutzung“.
+In den Einstellungen im Anbieter-Schalter `ChatGPT` wählen und `Continue with ChatGPT` wählen; derselbe Button verbindet später neu. Nach einer kurzen Erklärung öffnet sich die offizielle OpenAI-Anmeldung im Standardbrowser. Dort anmelden und die Plannutzung freigeben, danach zur App zurückwechseln. Die Wahl des Anbieters wird gemerkt. Solange ChatGPT genutzt wird, steht unter dem Arbeitsbereich der von OpenAI vorgeschriebene Hinweis „ChatGPT-Plan · Nutzung“.
 
 Tokens liegen nur im Arbeitsspeicher der laufenden App und werden beim Beenden verworfen; nach etwa einer Stunde ist eine neue Anmeldung nötig. Gespeichert werden nur eine Host-ID, die Registrierungskennung und die bestätigte Konto-ID, in der Desktop-App unter `~/Library/Application Support/Transcrilator/runtime`. Die zugrunde liegende OpenAI-Funktion ist eine [Preview](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations); Verfügbarkeit und Limits bestimmt OpenAI.
 
