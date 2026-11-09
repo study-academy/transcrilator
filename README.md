@@ -2,7 +2,7 @@
 
 # Transcrilator
 
-Lokaler Englisch-Deutsch-Übersetzer für Transkripte. Fügt ein englisches Transkript ein und erhält eine vollständige, sauber gegliederte deutsche Übersetzung mit Absätzen, fetten Überschriften und kursiven Kernaussagen. Die App läuft komplett auf dem eigenen Rechner und nutzt das **eigene** Abo jeder Person:
+Lokaler Transkript-Helfer für Videos, Audio und Text. Englisches Material wird vollständig ins Deutsche übersetzt, deutsches Material wird nicht übersetzt, sondern wortgetreu transkribiert und passend für Shortform oder Longform aufbereitet: mit Absätzen, fetten Überschriften und kursiven Kernaussagen. Die App läuft komplett auf dem eigenen Rechner und nutzt das **eigene** Abo jeder Person:
 
 - **Claude** (voreingestellt) über das offizielle, separat installierte [Claude Code](https://code.claude.com/docs/en/overview) mit eigenem Claude-Plan
 - **ChatGPT** über die offizielle OpenAI-Anmeldung mit eigenem ChatGPT-Plan
@@ -85,13 +85,19 @@ So wird die Länge bestimmt:
 
 Unter den Buttons steht nach der Übersetzung das erkannte Format; „Als Longform/Shortform kopieren“ stellt es um und kopiert neu.
 
-## Verlauf
+## Verlauf (⌘ F)
 
-In den Einstellungen unter „Verlauf“ stehen die letzten 30 Übersetzungen mit Datum, Format und Länge. Ein Klick kopiert sie erneut im passenden Format. Gespeichert werden nur die deutsche Übersetzung, ein kurzer Titel und die Länge, ausschließlich lokal auf dem Rechner; „Verlauf löschen“ entfernt alles.
+⌘ F öffnet den Verlauf als Suchfenster, ähnlich wie Spotlight. Pro Quelle steht eine Zeile mit Titel, Format und Länge, gruppiert nach Heute, Gestern, Diese Woche und Älter; zeigt die Zeile den neuesten Durchlauf; ältere Versuche bleiben gespeichert, werden aber nicht doppelt gelistet. Die Suche durchsucht Titel, Original und Ergebnis, ignoriert Groß- und Kleinschreibung sowie Akzente und zeigt die passende Textstelle. Pfeiltasten wählen, ↩ öffnet den Eintrag wieder als Tab, ⌘ C kopiert ihn im passenden Format. Kopieren, Details und Löschen erscheinen an der ausgewählten Zeile. Alles bleibt lokal auf dem Rechner; „Verlauf löschen“ entfernt alles.
 
-## Video lokal transkribieren
+## Video, Audio, Text und Untertitel
 
-Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM) in die Karte ziehen oder mit ⌘ O auswählen. Die App liest die Tonspur aus, Whisper (`onnx-community/whisper-small.en`, englisch) erstellt daraus lokal das englische Transkript, und danach übersetzt der gewählte Anbieter automatisch ins Deutsche.
+Ein heruntergeladenes Video, eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM), eine Textdatei (TXT, MD) oder Untertitel (SRT, VTT) in die Karte ziehen oder mit ⌘ O auswählen. Bei Untertiteln entfernt die App Nummern und Zeitmarken; die Länge kommt aus dem letzten Zeitstempel.
+
+Die gesprochene Sprache erkennt die App selbst: Ein kleines Whisper-Modell (`onnx-community/whisper-tiny`, etwa 40 MB, einmalig geladen) hört die ersten 30 Sekunden an. Bei eingefügtem Text entscheidet die Wortwahl; ist sie nicht eindeutig, fragt die App einmal „Deutsch oder Englisch?“.
+
+- **Englisch:** Whisper (`onnx-community/whisper-small.en`) transkribiert lokal, danach übersetzt der gewählte Anbieter ins Deutsche.
+- **Deutsch:** Das mehrsprachige `onnx-community/whisper-small` transkribiert lokal auf Deutsch. Es wird nichts übersetzt. Shortform wird lokal in Board-Szenen aufgeteilt; Longform gliedert der gewählte Anbieter in Absätze mit Überschriften, ohne den Wortlaut zu ändern. Ohne Verbindung fasst die App je vier Sätze zu einem Absatz zusammen.
+- In der Zeile unter der Karte steht die erkannte Sprache und das Format. Ein Klick auf die Sprache korrigiert sie und verarbeitet neu, ein Klick auf das Format stellt zwischen Shortform und Longform um.
 
 - Ton und Transkript bleiben auf dem Rechner. Nur das Modell (rund 410 MB) wird beim ersten Mal einmalig von Hugging Face geladen und danach aus dem Cache verwendet.
 - Auf Macs mit Apple Silicon läuft Whisper über WebGPU auf der Grafikeinheit; ohne WebGPU auf der CPU (langsamer).
@@ -102,13 +108,14 @@ Ein heruntergeladenes Video oder eine Audiodatei (MP4, MOV, M4A, MP3, WAV, WebM)
 | Aktion | Mac |
 |---|---|
 | Übersetzen bzw. Kopieren (Hauptaktion) | ⌘ ↩ |
-| Video oder Audio lokal transkribieren | ⌘ O |
+| Video, Audio, Text oder Untertitel öffnen | ⌘ O |
 | Neuer Tab | ⌘ T |
 | Zwischen Tabs wechseln | ⌘ ← / ⌘ → |
 | Text einfügen, ohne vorher ins Feld zu klicken | ⌘ V |
 | Fertige Übersetzung kopieren | ⌘ C |
 | Zwischen Englisch und Deutsch wechseln | ⇧ ⇥ (auch ⌃ ⇥ oder ⌘ ⇧ [ / ]) |
 | Alles leeren (Clear) | ⌘ ⌫ |
+| Verlauf durchsuchen | ⌘ F |
 | Einstellungen öffnen | ⌘ , |
 
 ⌘ Tab gehört macOS für den Programmwechsel und kann von keiner App genutzt werden. Die Übersicht steht auch in den Einstellungen hinter dem ⌘-Symbol; beim kurzen Zeigen mit der Maus erscheint der jeweilige Kurzbefehl klein unter dem Element. Unter Windows und Linux gilt Strg statt ⌘. In den Einstellungen und Dialogen behält ⇧ ⇥ seine übliche Rolle (zum vorherigen Element springen). In der Browser-Variante kann der Browser einzelne Kurzbefehle wie ⌃ ⇥ selbst belegen.
@@ -168,8 +175,3 @@ Verbrauch zeigt ausschließlich vom Anbieter gemeldete Tokenzähler pro Teil, ke
 
 Stumme bzw. ungültige Audiodaten werden vor der Spracherkennung abgefangen. Vier direkt aufeinanderfolgende gleiche Wortgruppen lösen eine Prüfmeldung aus: Das vollständige Original bleibt erhalten und wird nicht automatisch übersetzt. Wiederholung kann beabsichtigt sein; Text mit dem Video vergleichen, bei Bedarf korrigieren und Übersetzen erneut bewusst starten. Das englische Whisper-Modell bleibt unverändert; die Meldung beweist keine konkrete Fehlerursache.
 
-## Videosprache (1.6.2)
-
-Vor dem Import die gesprochene Sprache wählen. Englisch behält Whisper small.en und die anschließende deutsche Übersetzung. Deutsch verwendet das mehrsprachige `onnx-community/whisper-small` mit `language: german`, `task: transcribe`, lokal auf der CPU mit q8. Beim ersten deutschen Import werden etwa 250 MB Modelldaten von Hugging Face geladen (Encoder 92,3 MB, Decoder 157 MB plus kleine Konfigurationsdateien); Video und Audio werden nicht hochgeladen. Die Wahl gilt nur für neue Importe und wird im jeweiligen Verlaufseintrag gespeichert.
-
-Ein deutsches Original bleibt ein deutsches Originaltranskript. Es wird keine englische Zwischenübersetzung und keine zusätzliche deutsche Übersetzung erzeugt oder als Original ausgegeben. „Original kopieren“ kopiert dieses Transkript; der Verlauf weist Anbieter und Anbieternutzung als nicht angefallen bzw. nicht gemeldet aus. Die Sprache wird bewusst gewählt, nicht automatisch erraten.

@@ -1,8 +1,8 @@
 {
   "name": "transcrilator",
   "productName": "Transcrilator",
-  "version": "1.6.2",
-  "description": "Lokaler Englisch-Deutsch-\u00dcbersetzer f\u00fcr Transkripte. Nutzt das eigene Claude-Abo \u00fcber Claude Code oder den eigenen ChatGPT-Plan.",
+  "version": "1.7.0",
+  "description": "Lokaler Transkript-Helfer: übersetzt Englisch ins Deutsche und bereitet deutsches Material für Shortform oder Longform auf. Nutzt das eigene Claude-Abo über Claude Code oder den eigenen ChatGPT-Plan.",
   "private": true,
   "type": "module",
   "main": "desktop/main.js",
