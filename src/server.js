@@ -8,7 +8,7 @@ import { ClaudePlan } from './claude.js';
 import { translate, DEFAULT_PROMPT, MAX_TEXT, apiError } from './translate.js';
 const root = new URL('../',import.meta.url);
 // The only files the browser may load. Local transcription adds a worker and the vendored ONNX runtime.
-const STATIC={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/transcribe-worker.js':'transcribe-worker.js',
+const STATIC={'/':'index.html','/app.js':'app.js','/transcript-quality.js':'transcript-quality.js','/style.css':'style.css','/transcribe-worker.js':'transcribe-worker.js',
   '/vendor/transformers.min.js':'vendor/transformers.min.js','/vendor/ort-wasm-simd-threaded.asyncify.mjs':'vendor/ort-wasm-simd-threaded.asyncify.mjs',
   '/vendor/ort-wasm-simd-threaded.asyncify.wasm':'vendor/ort-wasm-simd-threaded.asyncify.wasm'};
 const TYPES={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',wasm:'application/wasm'};
@@ -87,7 +87,7 @@ export async function createApp({fetcher=fetch, runtime=new URL('.runtime/',root
         res.writeHead(200,{'Content-Type':'application/x-ndjson; charset=utf-8'});
         const send=data=>{if(!res.destroyed)res.write(JSON.stringify(data)+'\n');};
         try {
-          const request={text:data.text,prompt:data.prompt,signal:controller.signal,progress:p=>send({type:'progress',...p})};
+          const request={text:data.text,prompt:data.prompt,signal:controller.signal,progress:p=>send({type:'progress',...p}),part:p=>send({type:'part',...p})};
           const output=provider==='claude'?await claude.translate(request):await translate({...request,model:data.model,token,fetcher});
           send({type:'completed',text:output});
         } catch(e) { if(provider==='chatgpt' && e.status===401)auth.disconnect(); send({type:'error',error:e.name==='TimeoutError'?'Zeitlimit erreicht. Keine vollständige Übersetzung erstellt.':e.name==='AbortError'?'Übersetzung abgebrochen.':e.message==='fetch failed'?'Verbindung zu OpenAI fehlgeschlagen.':e.message}); }

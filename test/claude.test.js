@@ -71,3 +71,8 @@ test('one failed parallel chunk aborts siblings and returns no partial translati
  await assert.rejects(f.adapter.translate({text}),/nicht vollständig/);
  assert.ok(aborted.length>=1);assert.ok(f.calls.filter(c=>c.args.includes('-p')).length<chunks.length);
 });
+test('truncated Claude result preserves generated text and reported usage as incomplete',async()=>{
+ const parts=[];const f=fixture({result:()=>({code:0,stdout:JSON.stringify({type:'result',subtype:'success',is_error:false,stop_reason:'max_tokens',result:'Unvollständiger Text',usage:{input_tokens:21,output_tokens:9}})})});
+ await assert.rejects(f.adapter.translate({text:'Hello',part:part=>parts.push(part)}));
+ assert.equal(parts.length,1);assert.equal(parts[0].complete,false);assert.equal(parts[0].text,'Unvollständiger Text');assert.deepEqual(parts[0].usage,{inputTokens:21,outputTokens:9});
+});

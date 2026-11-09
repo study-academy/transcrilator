@@ -1,8 +1,8 @@
 {
   "name": "transcrilator",
   "productName": "Transcrilator",
-  "version": "1.6.0",
-  "description": "Lokaler Englisch-Deutsch-Übersetzer für Transkripte. Nutzt das eigene Claude-Abo über Claude Code oder den eigenen ChatGPT-Plan.",
+  "version": "1.6.2",
+  "description": "Lokaler Englisch-Deutsch-\u00dcbersetzer f\u00fcr Transkripte. Nutzt das eigene Claude-Abo \u00fcber Claude Code oder den eigenen ChatGPT-Plan.",
   "private": true,
   "type": "module",
   "main": "desktop/main.js",
@@ -12,7 +12,7 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check public/transcribe-worker.js",
+    "check": "node --check src/server.js && node --check src/auth.js && node --check src/translate.js && node --check src/claude.js && node --check public/app.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check public/transcribe-worker.js && node --check public/transcript-quality.js && node --check src/usage.js",
     "desktop": "electron .",
     "dist:mac": "electron-builder --mac --arm64 --x64"
   },

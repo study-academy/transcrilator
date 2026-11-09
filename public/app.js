@@ -27,11 +27,14 @@ async function api(path, body) {
 }
 // Paste hint names the platform's modifier key.
 if(!/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent))$('paste-keys').textContent='Strg V';
+// German material is refined, English material translated. Until the language is known, the guess from the text decides the label.
+const languageOf=(tab=cur())=>tab.sourceLanguage || tab.guess;
 function update() {
-  const german=language==='german';
-  $('action').textContent=running?'Abbrechen':german?'Kopieren':'Übersetzen';
+  const result=language==='german', refine=languageOf()==='de';
+  $('action').textContent=running?'Abbrechen':result?'Kopieren':refine?'Aufbereiten':'Übersetzen';
   const ready=provider==='chatgpt'?connected && !!$('model').value:!!claudeState?.ready;
-  $('action').disabled=running?false:german?!$('output').value:!ready || !$('source').value.trim() || $('source').value.length>maxText || !$('prompt').value.trim();
+  const text=$('source').value;
+  $('action').disabled=running?false:result?!$('output').value:!text.trim() || text.length>maxText || (!refine && (!ready || !$('prompt').value.trim()));
   $('clear').disabled=!busy && tabs.length===1 && isEmptyTab(cur());
   $('source').readOnly=running;$('prompt').readOnly=busy || !promptEditing;$('model').disabled=busy;$('reset').disabled=busy;
   $('edit-prompt').disabled=busy;
@@ -41,6 +44,12 @@ function update() {
   $('edit-prompt').title=promptEditing?'Bearbeitung beenden':'Prompt bearbeiten';
 }
 function showLanguage(next, focusTab=false) {
+  // German material has one view: the transcript, then the refined result. The switch only serves translations.
+  const refine=cur().sourceLanguage==='de';
+  if(!cur().output)next='english';
+  $('language-switch').dataset.off=String(refine);$('language-switch').setAttribute('aria-hidden',String(refine));
+  $('source').setAttribute('aria-label',refine?'Deutsches Transkript':'Transkript');
+  $('output-view').setAttribute('aria-label',refine?'Aufbereitetes Transkript':'Deutsche Übersetzung');
   language=next;cur().language=next;
   const german=next==='german';
   $('language-switch').dataset.language=next;
@@ -100,7 +109,7 @@ function applyProvider() {
 // Nothing shows while Claude is still being checked, so the message never flashes on start.
 function showConnectionError(level) {
   const checking=provider==='claude' && providerSupport && !claudeState;
-  const missing=!checking && level!=='green';
+  const missing=!checking && level!=='green' && languageOf()!=='de';
   document.querySelector('.editor-wrap').dataset.connection=missing?'missing':'ok';
   $('connect-error').hidden=!missing;
   if(!missing)return;
@@ -243,7 +252,9 @@ function toast(message) {
 }
 // Tabs: every tab keeps its own script, result and view. The visible tab is rendered into the single
 // card; a queue processes queued tabs one after another in the background (transcribe, then translate).
-const newTab=()=>({id:crypto.randomUUID(),source:'',output:'',mediaSeconds:null,formatOverride:null,fileName:null,file:null,language:'english',state:'idle',error:''});
+// sourceLanguage: 'de' or 'en' once known (detected or chosen), null before; guess: the live guess from pasted text.
+// media keeps the dropped file so a corrected language can transcribe it again; refined caches German results per format.
+const newTab=()=>({id:crypto.randomUUID(),source:'',output:'',mediaSeconds:null,formatOverride:null,fileName:null,file:null,media:null,originalTranscript:'',sourceLanguage:null,guess:null,refined:{},transcription:null,request:null,translationParts:[],language:'english',state:'idle',error:''});
 let tabs=[newTab()], active=0;
 const cur=()=>tabs[active];
 const isEmptyTab=tab=>!tab.source.trim() && !tab.output && !tab.file && tab.state==='idle';
@@ -265,7 +276,7 @@ function render(motion='') {
   const tab=cur();
   $('source').value=tab.source;setOutput(tab.output);showLanguage(tab.language);
   running=tab.state==='queued'||tab.state==='running';
-  status(tab.error,!!tab.error);
+  status(tab.error || tab.notice || '',!!tab.error);
   veilFor(tab);showFormat();renderDots();update();
   if(motion){$('stage').classList.remove('slide-left','slide-right','collapse');void $('stage').offsetWidth;$('stage').classList.add(motion);}
 }
@@ -293,7 +304,8 @@ function step(direction) {
 $('new-tab').onclick=()=>openTab('after');
 $('source').oninput=()=>{
   const tab=cur();
-  Object.assign(tab,{source:$('source').value,output:'',mediaSeconds:null,formatOverride:null,fileName:null,error:''});
+  Object.assign(tab,{source:$('source').value,output:'',mediaSeconds:null,formatOverride:null,error:'',notice:'',sourceLanguage:null,refined:{},media:null});
+  tab.guess=textLanguage(tab.source);
   setOutput('');
   const tooLong=tab.source.length>maxText;
   status(tooLong?'Grenze überschritten. Bitte auf mehrere Übersetzungen verteilen. Es wird nichts abgeschnitten.':'',tooLong);
@@ -308,18 +320,28 @@ $('prompt').oninput=()=>{
 // Clear returns to the starting point: one empty card. Finished results are already in the history;
 // if something is still running or waiting, it asks once.
 function clearAll() {
+  for(const tab of tabs.filter(tab=>tab.state==='queued')){startHistoryAttempt(tab);tab.state='idle';tab.error='Abgebrochen, bevor die Verarbeitung gestartet wurde.';saveHistory(tab);}
   if(jobController)jobController.abort();
   tabs=[newTab()];active=0;render(tabs.length?'collapse':'');$('source').focus();
 }
 $('clear').onclick=()=>{
   const pending=tabs.filter(tab=>tab.state==='running'||tab.state==='queued').length;
   if(!pending)return clearAll();
-  $('clear-confirm-text').textContent=pending===1?'Eine Übersetzung läuft noch und geht dabei verloren.':`${pending} Übersetzungen laufen noch oder warten und gehen dabei verloren.`;
+  $('clear-confirm-text').textContent=pending===1?'Eine Verarbeitung läuft noch und geht dabei verloren.':`${pending} Verarbeitungen laufen noch oder warten und gehen dabei verloren.`;
   $('clear-confirm').showModal();
 };
 for(const button of $('clear-confirm').querySelectorAll('[data-clear]'))button.onclick=()=>{
   $('clear-confirm').close();if(button.dataset.clear==='confirm')clearAll();
 };
+// Language of pasted text from common function words; null when the text cannot tell.
+const DE_WORDS=new Set('der die das und ist nicht ich du wir ein eine einen zu mit auf für sich auch es dass wenn aber oder noch nur wie bei dem den des im von wird sind hat'.split(' '));
+const EN_WORDS=new Set('the and is not you we a an to with on for it that if but or this are was have be of what your'.split(' '));
+function textLanguage(text) {
+  let de=0,en=0;
+  for(const word of text.slice(0,20000).toLowerCase().match(/\p{L}+/gu)||[]){if(DE_WORDS.has(word))de++;else if(EN_WORDS.has(word))en++;}
+  if(de+en<4)return null;
+  return de>=en*2?'de':en>=de*2?'en':null;
+}
 // Shortform (under 3 minutes) is copied in the Studyacademy Copywriting Board layout: one scene per row,
 // the hook first and the script right after it. Pasted into the last hook row, the two hook rows above
 // stay free for ad hook variants. Duration comes from the video, or ~150 spoken words per minute.
@@ -350,6 +372,15 @@ function boardRows(output) {
   }
   if(carry)rows.length?rows[rows.length-1]+=` ${carry}`:rows.push(carry);
   return rows;
+}
+// German without a model: markers removed; shortform one scene per paragraph, longform a few sentences per paragraph.
+const MARKERS=/\[[^\]]{1,30}\]|\((?:Musik|Applaus|Lachen|Gelächter)\)/gi;
+function localRefine(text,kind) {
+  const clean=text.replace(MARKERS,' ').replace(/[ \t]+/g,' ').trim();
+  if(kind==='short')return boardRows(clean).join('\n\n');
+  const sentences=[...sentenceSegmenter.segment(clean.replace(/\s+/g,' '))].map(part=>part.segment.trim()).filter(Boolean), paragraphs=[];
+  for(let i=0;i<sentences.length;i+=4)paragraphs.push(sentences.slice(i,i+4).join(' '));
+  return paragraphs.join('\n\n');
 }
 const escapeHtml=text=>text.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // The clipboard content for one translation: board rows for shortform, formatted paragraphs otherwise.
@@ -390,66 +421,222 @@ async function copy({automatic=false}={}) {
     status('Bitte den markierten Text mit ⌘C oder Strg+C kopieren.');
   }
 }
-// After a translation the status line names the detected format; one click switches it and recopies.
+// Under a result one quiet line names language and format; each word switches with one click.
 function showFormat() {
   const tab=cur();
   if(!tab.output){$('format-line').hidden=true;return;}
-  const {seconds,basis}=scriptLength(tab), kind=formatOf(tab);
-  const length=`${basis==='estimate'?'ca. ':''}${clock(seconds)} Min`;
-  $('format-text').textContent=kind==='short'?`Shortform · ${length} · in die letzte Hook-Zeile einfügen`:`Longform · ${length}`;
-  $('format-switch').textContent=kind==='short'?'Als Longform kopieren':'Als Shortform kopieren';
+  const {seconds,basis}=scriptLength(tab), kind=formatOf(tab), refine=tab.sourceLanguage==='de';
+  $('language-toggle').textContent=refine?'Deutsch':'Englisch → Deutsch';
+  $('language-toggle').title=refine?'Ist Englisch: übersetzen':'Ist Deutsch: nur aufbereiten';
+  $('format-switch').textContent=kind==='short'?'Shortform':'Longform';
+  $('format-switch').title=kind==='short'?'Als Longform':'Als Shortform';
+  $('format-text').textContent=`${basis==='estimate'?'ca. ':''}${clock(seconds)} Min`;
+  $('format-hint').hidden=$('format-hint-dot').hidden=kind!=='short';
   $('format-line').hidden=false;
 }
+// Translations keep their text and only copy differently; German results depend on the format and are reused once made.
 $('format-switch').onclick=async()=>{
   const tab=cur();
+  if(busy)return;
   tab.formatOverride=formatOf(tab)==='short'?'long':'short';
+  if(tab.sourceLanguage==='de') {
+    const ready=tab.refined[formatOf(tab)];
+    if(!ready)return queueTab(tab);
+    tab.output=ready;render();
+  }
   updateHistoryKind(tab);
   await copy();
 };
-// History: the last translations stay on this device only (local app storage) so any of them can be
-// copied again in its format. Only the German result and a short title are kept, never the audio.
-const historyStorageKey='translator.history', HISTORY_LIMIT=30;
-function readHistory(){try{const list=JSON.parse(localStorage.getItem(historyStorageKey)||'[]');return Array.isArray(list)?list:[];}catch{return [];}}
+// A wrong language is corrected here: the material is processed again, a dropped file transcribed again.
+$('language-toggle').onclick=()=>{
+  const tab=cur();
+  if(busy)return;
+  tab.sourceLanguage=tab.sourceLanguage==='de'?'en':'de';tab.refined={};
+  if(tab.media)tab.file=tab.media;
+  if(tab.sourceLanguage==='en' && !tab.file && !providerReady()){tab.output='';tab.error='Zum Übersetzen einen Anbieter verbinden.';render();return;}
+  queueTab(tab);
+};
+// History details preserve source, translation and the exact request context separately.
+const historyStorageKey='translator.history';
+function readHistory(){try{const list=JSON.parse(localStorage.getItem(historyStorageKey)||'[]');return Array.isArray(list)?list.filter(item=>item && typeof item==='object'):[];}catch{return [];}}
 function writeHistory(list) {
-  // Long scripts can fill the storage; drop the oldest entries until it fits.
-  for(;;) {
-    try{localStorage.setItem(historyStorageKey,JSON.stringify(list));return;}
-    catch{if(list.length<=1)return;list=list.slice(0,-1);}
-  }
+  try{localStorage.setItem(historyStorageKey,JSON.stringify(list));return true;}
+  catch{status('Verlauf konnte nicht gespeichert werden. Speicher voll oder gesperrt. Bestehende Einträge bleiben erhalten; aktuelle Texte bitte sichern.',true);return false;}
 }
+function startHistoryAttempt(tab){tab.historyId=crypto.randomUUID();tab.startedAt=new Date().toISOString();tab.historySource=tab.source;tab.request=null;tab.translationParts=[];}
 function saveHistory(tab) {
-  // Titles skip transcript markers like [Music] and timestamps.
-  const source=tab.source.replace(/\[[^\]]{1,30}\]/g,' ').replace(/(?<![\d:])(?:\d{1,2}:)?\d{1,2}:\d{2}(?![\d:])/g,' ').trim(), {seconds}=scriptLength(tab);
-  const title=tab.fileName || source.split(/\s+/).slice(0,8).join(' ')+(source.split(/\s+/).length>8?' …':'');
-  const entry={id:tab.id,date:new Date().toISOString(),title,output:tab.output,seconds,kind:formatOf(tab)};
-  writeHistory([entry,...readHistory().filter(item=>item.id!==tab.id)].slice(0,HISTORY_LIMIT));
-  renderHistory();
+  const source=tab.source.replace(/\[[^\]]{1,30}\]/g,' ').trim(), {seconds}=scriptLength(tab);
+  const title=tab.fileName || source.split(/\s+/).slice(0,8).join(' ') || 'Importversuch';
+  const entry={version:2,id:tab.historyId || tab.id,date:tab.startedAt || new Date().toISOString(),title,source:tab.historySource ?? tab.source,sourceLanguage:tab.sourceLanguage || 'en',
+    originalTranscript:tab.originalTranscript,output:tab.output,seconds,kind:formatOf(tab),
+    fileName:tab.fileName,transcription:tab.transcription,request:tab.request,
+    notice:tab.notice || '',translationParts:(tab.translationParts || []).filter(Boolean),error:tab.error,state:tab.state};
+  const saved=writeHistory([entry,...readHistory().filter(item=>item.id!==entry.id)]);
+  if(!saved)tab.error='Verlauf nicht gespeichert. Aktuelle Texte bitte sichern; bestehende Einträge bleiben erhalten.';
+  renderHistory();return saved;
 }
 function updateHistoryKind(tab) {
-  const list=readHistory(), entry=list.find(item=>item.id===tab.id);
+  const list=readHistory(), entry=list.find(item=>item.id===(tab.historyId || tab.id));
   if(entry){entry.kind=formatOf(tab);writeHistory(list);renderHistory();}
 }
-function renderHistory() {
-  const list=readHistory();
-  $('history-empty').hidden=list.length>0;$('history-clear').hidden=!list.length;
-  $('history-list').replaceChildren(...list.map(entry=>{
-    const item=document.createElement('li'), button=document.createElement('button');
-    button.type='button';button.className='history-item';
-    const title=document.createElement('span');title.className='history-title';title.textContent=entry.title||'Ohne Titel';
-    const meta=document.createElement('span');meta.className='history-meta';
-    const when=new Date(entry.date).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    meta.textContent=`${when} · ${entry.kind==='short'?'Shortform':'Longform'} · ${clock(entry.seconds||0)} Min`;
-    button.append(title,meta);
-    button.setAttribute('aria-label',`${entry.title}, ${meta.textContent}, kopieren`);
-    button.onclick=async()=>{
-      try{const payload=payloadFor(entry);await writeClipboard(payload);toast(copiedMessage(payload.board));}
-      catch{status('Kopieren nicht möglich. Bitte erneut versuchen.',true);}
-    };
-    item.append(button);return item;
-  }));
+function historySection(label,text) {
+  const section=document.createElement('section'), heading=document.createElement('h3'), content=document.createElement('pre');
+  heading.textContent=label;content.textContent=text;section.append(heading,content);return section;
 }
+// Technical details stay one step away: request, prompt, usage, parts and transcription data.
+function openHistory(entry) {
+  const refine=entry.sourceLanguage==='de';
+  $('history-detail-title').textContent=entry.title||'Ohne Titel';
+  const parts=Array.isArray(entry.translationParts)?entry.translationParts.filter(part=>part && typeof part.text==='string'):[];
+  const usage=parts.filter(part=>part.usage).map(part=>`Teil ${part.index+1}: ${Object.entries(part.usage).map(([key,value])=>`${key}: ${value}`).join(' · ')}`).join('\n');
+  const context=[`Zeit: ${entry.date || 'Unbekannt'}`,`Datei: ${entry.fileName || 'Nicht gespeichert'}`,
+    `Status: ${entry.error || entry.notice || (entry.output?'Abgeschlossen':'Nicht abgeschlossen')}`,
+    `Spracherkennung: ${entry.transcription?JSON.stringify(entry.transcription,null,2):'Nicht gespeichert'}`,
+    `Anbieter: ${entry.request?.provider || (refine?'Keiner, lokal':'Unbekannt')}`,`Modell: ${entry.request?.model || 'Unbekannt'}`].join('\n');
+  $('history-detail-content').replaceChildren(
+    historySection('Kontext',context),
+    historySection(`Originaltranskript (${entry.transcription?.language==='de'?'Deutsch':entry.transcription?.language==='en'?'Englisch':'Sprache nicht gespeichert'})`,entry.originalTranscript || 'Nicht gespeichert / kein Video-Transkript vorhanden.'),
+    historySection(refine?'Deutscher Quelltext':'Englischer Quelltext der Übersetzung',typeof entry.source==='string'?entry.source:'In diesem älteren Eintrag nicht gespeichert.'),
+    historySection(refine?'Aufbereitetes Ergebnis':'Deutsche Übersetzung',entry.output || 'Kein vollständiges Ergebnis vorhanden.'),
+    historySection('Erzeugte Teile',parts.length?parts.map(part=>`Teil ${part.index+1} · ${part.complete?'vollständig':'unvollständig'}\n${part.text}`).join('\n\n'):'Nicht gespeichert.'),
+    historySection('Verbrauch (vom Anbieter gemeldet; Token)',refine && !entry.request?'Keine Anbieternutzung: lokal aufbereitet.':usage || 'Unbekannt / vom Anbieter nicht gemeldet. Keine Schätzung.'),
+    historySection('Verwendeter Prompt',entry.request?.prompt || 'In diesem Eintrag nicht gespeichert.')
+  );
+  $('history-detail-copy').disabled=!entry.output;
+  $('history-detail-copy').onclick=()=>copyEntry(entry);
+  $('history-detail').showModal();
+}
+// The list: one row per source (its newest attempt), only rows with a result or a transcript, grouped by day.
+// Every attempt stays stored; failed or replaced ones are simply not listed.
+const fold=text=>String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+const entryKey=entry=>entry.originalTranscript || (typeof entry.source==='string' && entry.source.trim()) || entry.id;
+function historyRows() {
+  const seen=new Set(), rows=[];
+  for(const entry of readHistory()) {
+    if(!entry.output && !entry.originalTranscript)continue;
+    const key=entryKey(entry);
+    if(seen.has(key))continue;
+    seen.add(key);rows.push(entry);
+  }
+  return rows;
+}
+// File names read as titles: no extension, no underscores.
+const displayTitle=entry=>(entry.fileName && entry.title===entry.fileName?entry.fileName.replace(/\.[a-z0-9]{2,4}$/i,'').replace(/[_]+/g,' ').trim():entry.title) || 'Ohne Titel';
+const DAY=864e5;
+function whenGroup(date) {
+  const today=new Date();today.setHours(0,0,0,0);
+  const time=new Date(date).getTime();
+  return time>=today.getTime()?'Heute':time>=today.getTime()-DAY?'Gestern':time>=today.getTime()-6*DAY?'Diese Woche':'Älter';
+}
+function whenLabel(date) {
+  const time=new Date(date), minutes=Math.round((Date.now()-time)/6e4);
+  if(minutes<1)return 'Gerade eben';
+  if(minutes<60)return `vor ${minutes} Min`;
+  return whenGroup(date)==='Heute'?time.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):time.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
+}
+function entryMeta(entry) {
+  const what=entry.output?(entry.kind==='short'?'Shortform':'Longform'):'Nur Transkript';
+  return `${entry.sourceLanguage==='de'?'Deutsch':'Englisch → Deutsch'} · ${what} · ${clock(entry.seconds||0)} Min`;
+}
+// When the title does not match the search, the matching passage of the text shows instead.
+function snippet(entry,query) {
+  for(const text of [entry.output,entry.source,entry.originalTranscript]) {
+    if(typeof text!=='string')continue;
+    const at=fold(text).indexOf(query);
+    if(at<0)continue;
+    const from=Math.max(0,at-40);
+    return `${from?'…':''}${text.slice(from,at+query.length+80).replace(/[*_]/g,'').replace(/\s+/g,' ').trim()}…`;
+  }
+  return '';
+}
+const ICONS={
+  copy:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg>',
+  details:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>',
+  remove:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>'
+};
+function iconButton(name,label,action) {
+  const button=document.createElement('button');
+  button.type='button';button.className='icon-button';button.innerHTML=ICONS[name];button.setAttribute('aria-label',label);button.title=label;
+  button.onclick=event=>{event.stopPropagation();action();};
+  return button;
+}
+let historyShown=[], historySelected=0;
+function renderHistory() {
+  const query=fold($('history-search').value.trim());
+  historyShown=historyRows().filter(entry=>!query || [entry.title,entry.fileName,entry.output,entry.source,entry.originalTranscript].some(text=>fold(text).includes(query)));
+  historySelected=Math.max(0,Math.min(historySelected,historyShown.length-1));
+  $('history-empty').hidden=historyShown.length>0;$('history-empty').textContent=query?'Nichts gefunden.':'Noch nichts im Verlauf.';
+  $('history-clear').hidden=!historyShown.length || !!query;
+  const children=[];let group='';
+  historyShown.forEach((entry,index)=>{
+    const day=whenGroup(entry.date);
+    if(day!==group){group=day;const heading=document.createElement('p');heading.className='history-group';heading.textContent=day;children.push(heading);}
+    const row=document.createElement('div'), item=document.createElement('button');
+    row.className='history-row';row.id=`history-row-${index}`;row.setAttribute('role','option');row.setAttribute('aria-selected',String(index===historySelected));
+    item.type='button';item.className='history-item';item.tabIndex=-1;
+    const title=document.createElement('span');title.className='history-title';title.textContent=displayTitle(entry);
+    const when=document.createElement('span');when.className='history-when';when.textContent=whenLabel(entry.date);
+    const meta=document.createElement('span');meta.className='history-meta';meta.textContent=entryMeta(entry);
+    item.append(title,when);
+    const match=query && !fold(displayTitle(entry)).includes(query)?snippet(entry,query):'';
+    if(match){const passage=document.createElement('span');passage.className='history-snippet';passage.textContent=match;item.append(passage);}
+    item.append(meta);item.onclick=()=>openFromHistory(entry);
+    const actions=document.createElement('span');actions.className='history-actions';
+    if(entry.output)actions.append(iconButton('copy','Kopieren',()=>copyEntry(entry)));
+    actions.append(iconButton('details','Details',()=>openHistory(entry)),iconButton('remove','Löschen',()=>removeEntry(entry)));
+    row.append(item,actions);row.onmousemove=()=>selectHistory(index,false);
+    children.push(row);
+  });
+  $('history-results').replaceChildren(...children);
+  $('history-search').setAttribute('aria-activedescendant',historyShown.length?`history-row-${historySelected}`:'');
+}
+function selectHistory(index,scroll=true) {
+  if(index===historySelected || index<0 || index>=historyShown.length)return;
+  $(`history-row-${historySelected}`)?.setAttribute('aria-selected','false');
+  historySelected=index;
+  const row=$(`history-row-${index}`);row?.setAttribute('aria-selected','true');
+  $('history-search').setAttribute('aria-activedescendant',`history-row-${index}`);
+  if(scroll)row?.scrollIntoView({block:'nearest'});
+}
+async function copyEntry(entry) {
+  try{await writeClipboard(payloadFor({output:entry.output,kind:entry.kind}));toast(copiedMessage(entry.kind==='short'));}
+  catch{status('Kopieren nicht möglich.',true);}
+}
+function removeEntry(entry) {
+  const key=entryKey(entry);
+  writeHistory(readHistory().filter(item=>entryKey(item)!==key));renderHistory();
+}
+// Opening an entry brings it back as a tab, ready to copy, switch format or correct the language.
+function openFromHistory(entry) {
+  $('history').close();
+  const open=tabs.findIndex(tab=>tab.historyId===entry.id && tab.state==='idle');
+  if(open>=0){goTo(open);return;}
+  const source=typeof entry.source==='string'?entry.source:entry.originalTranscript || '';
+  const kind=entry.kind==='short'?'short':'long';
+  const tab=Object.assign(newTab(),{source,output:entry.output || '',sourceLanguage:entry.sourceLanguage==='de'?'de':'en',
+    mediaSeconds:entry.seconds ?? null,formatOverride:kind,fileName:entry.fileName || null,originalTranscript:entry.originalTranscript || '',
+    transcription:entry.transcription || null,request:entry.request || null,historyId:entry.id,startedAt:entry.date,
+    refined:entry.sourceLanguage==='de' && entry.output?{[kind]:entry.output}:{},language:entry.output?'german':'english'});
+  if(isEmptyTab(cur()))tabs[active]=tab;else tabs.splice(++active,0,tab);
+  render('slide-left');
+}
+function showHistory() {
+  if($('settings').matches(':popover-open'))$('settings').hidePopover();
+  if($('history').open)return $('history').close();
+  $('history-search').value='';historySelected=0;renderHistory();
+  $('history').showModal();$('history-search').focus();
+}
+$('history-search').oninput=()=>{historySelected=0;renderHistory();};
+$('history-search').onkeydown=event=>{
+  const mod=event.metaKey||event.ctrlKey, entry=historyShown[historySelected];
+  if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();selectHistory(historySelected+(event.key==='ArrowDown'?1:-1));return;}
+  if(event.key==='Enter' && entry){event.preventDefault();openFromHistory(entry);return;}
+  const input=event.target;
+  if(mod && event.key.toLowerCase()==='c' && entry?.output && input.selectionStart===input.selectionEnd){event.preventDefault();copyEntry(entry);}
+};
+$('history-open').onclick=showHistory;
+$('history-detail-back').onclick=()=>$('history-detail').close();
 $('history-clear').onclick=()=>{try{localStorage.removeItem(historyStorageKey);}catch{}renderHistory();};
-renderHistory();
 // Progress veil: playful phrases about what happens to the script, each acted out by the scribble,
 // plus a bar that creeps towards the next milestone. It shows only on the tab being processed and
 // lasts exactly as long as the work.
@@ -466,6 +653,7 @@ const LISTEN_PHRASES=[
   ['Schreibe fleißig mit','type'],['Trenne Musik von Worten','sweep'],['Sortiere die Silben','sort'],
   ['Poliere die Aussprache','sparkle'],['Höre zwischen den Zeilen','slant'],['Drehe die Lautstärke im Kopf auf','iron']
 ];
+const REFINE_PHRASES=PHRASES.filter(([text])=>!/Übersetze|Anglizismen|Hey|deutsche Sätze/.test(text));
 const WAIT_PHRASES=[['Wartet auf seinen Einsatz','bounce'],['Steht schon in den Startlöchern','type']];
 // job: what the queue is doing right now, so the veil can be restored when its tab becomes visible again.
 const job={tab:null,phrases:PHRASES,target:0,cap:0,detail:''};
@@ -495,7 +683,7 @@ function hideVeil() {
   setTimeout(()=>{if(!progress.shownFor)$('progress').hidden=true;},180);
 }
 function veilFor(tab) {
-  const key=tab.state==='running'?`${tab.id}:${job.phrases===LISTEN_PHRASES?'listen':'translate'}`:tab.state==='queued'?`${tab.id}:wait`:null;
+  const key=tab.state==='running'?`${tab.id}:${job.phrases===LISTEN_PHRASES?'listen':job.phrases===REFINE_PHRASES?'refine':'translate'}`:tab.state==='queued'?`${tab.id}:wait`:null;
   if(!key)return hideVeil();
   if(progress.shownFor===key)return;
   if(tab.state==='queued')showVeil(WAIT_PHRASES,0,0,'Kommt gleich dran');
@@ -523,12 +711,16 @@ async function decodeAudio(file) {
   try {
     const decoded=await context.decodeAudioData(await file.arrayBuffer());
     const audio=new Float32Array(decoded.length);
+    if(!decoded.length)throw new Error('Keine Tonspur.');
     for(let channel=0;channel<decoded.numberOfChannels;channel++) {
       const data=decoded.getChannelData(channel);
       for(let i=0;i<data.length;i++)audio[i]+=data[i]/decoded.numberOfChannels;
     }
+    let peak=0;for(const sample of audio){if(!Number.isFinite(sample))throw new Error('Ungültige Audiodaten.');peak=Math.max(peak,Math.abs(sample));}
+    if(peak<1e-7)throw new Error('Die Tonspur ist stumm.');
     return audio;
-  } catch {
+  } catch(error) {
+    if(['Keine Tonspur.','Ungültige Audiodaten.','Die Tonspur ist stumm.'].includes(error.message))throw error;
     throw new Error('Die Tonspur dieser Datei lässt sich nicht lesen. Bitte MP4, MOV, M4A, MP3, WAV oder WebM verwenden.');
   } finally {context.close();}
 }
@@ -536,19 +728,21 @@ function runWhisper(audio,signal,tab) {
   return new Promise((resolve,reject)=>{
     transcriber ||= new Worker('/transcribe-worker.js',{type:'module'});
     const worker=transcriber;
+    if(signal.aborted){reject(signal.reason);return;}
     const stop=()=>{worker.terminate();if(transcriber===worker)transcriber=null;reject(new DOMException('Abgebrochen.','AbortError'));};
     signal.addEventListener('abort',stop,{once:true});
     worker.onerror=event=>{signal.removeEventListener('abort',stop);event.preventDefault();transcriber=null;worker.terminate();reject(new Error('Die lokale Spracherkennung konnte nicht starten.'));};
     worker.onmessage=({data})=>{
       const mb=n=>Math.round(n/1e6);
       if(data.type==='download')jobStep(tab,{target:0.04+0.26*data.loaded/data.total,cap:0.3,detail:`Lade Spracherkennung (einmalig) · ${mb(data.loaded)} von ${mb(data.total)} MB`});
+      if(data.type==='language'){tab.sourceLanguage=data.language;tab.transcription={...tab.transcription,detected:{language:data.language,margin:data.margin}};if(tab===cur())update();}
       if(data.type==='chunks')jobStep(tab,{target:0.3+0.68*data.done/data.total,cap:0.3+0.68*(data.done+1)/data.total-0.02,detail:data.total>1?`Transkribiere · ${data.done} von ${data.total} Abschnitten`:'Transkribiere'});
       if(data.type==='done'||data.type==='error') {
         signal.removeEventListener('abort',stop);
-        if(data.type==='done')resolve(data.text);else reject(new Error(`Transkription fehlgeschlagen: ${data.error}`));
+        if(data.type==='done'){tab.transcription={...tab.transcription,...data.metadata};resolve(data.text);}else reject(new Error(`Transkription fehlgeschlagen: ${data.error}`));
       }
     };
-    worker.postMessage({type:'transcribe',audio},[audio.buffer]);
+    worker.postMessage({type:'transcribe',audio,language:tab.sourceLanguage || 'auto'},[audio.buffer]);
   });
 }
 async function transcribeTab(tab,signal) {
@@ -557,18 +751,27 @@ async function transcribeTab(tab,signal) {
   signal.throwIfAborted();
   if(!audio.length)throw new Error('Die Datei enthält keine Tonspur.');
   tab.mediaSeconds=audio.length/16000;
+  tab.transcription={...tab.transcription,requestedLanguage:tab.sourceLanguage || 'auto',sampleRate:16000,durationSeconds:tab.mediaSeconds};
   tab.source=await runWhisper(audio,signal,tab);
-  tab.file=null;   // the video itself is not kept; only its transcript
+  tab.originalTranscript=tab.source;tab.historySource=tab.source;
+  // Only a reference to the file on disk stays, for a corrected language; it is never copied or stored.
+  tab.media=tab.file;tab.file=null;
   if(tab===cur())$('source').value=tab.source;
+  if(repetitiveTranscript(tab.source))throw new Error('Auffällige Wiederholungen im Transkript. Bitte mit dem Video vergleichen und den erkannten Text prüfen, bevor du ihn weiterverwendest.');
 }
-async function translateTab(tab,signal) {
-  jobPhase(tab,PHRASES);
-  const response=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json','X-Local-CSRF':csrf},signal,body:JSON.stringify({provider,text:tab.source,prompt:$('prompt').value,model:$('model').value})});
+// The prompt decides the task: the editable translation prompt, or the fixed refine prompt for German.
+async function providerRun(tab,signal,task) {
+  tab.historySource=tab.source;
+  tab.request={provider,model:provider==='claude'?'sonnet':$('model').value,prompt:task==='refine'?refinePrompt:$('prompt').value,task};
+  tab.translationParts=[];
+  jobPhase(tab,task==='refine'?REFINE_PHRASES:PHRASES);
+  const response=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json','X-Local-CSRF':csrf},signal,body:JSON.stringify({...tab.request,text:tab.source})});
   if(!response.ok){const data=await response.json();throw new Error(data.error || 'Übersetzung fehlgeschlagen.');}
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',result=null;
   function event(line) {
     if(!line.trim())return;
     const item=JSON.parse(line);
+    if(item.type==='part'){tab.translationParts[item.index]={index:item.index,text:typeof item.delta==='string'?(tab.translationParts[item.index]?.text || '')+item.delta:item.text,complete:item.complete,usage:item.usage || null};if(item.complete)saveHistory(tab);}
     if(item.type==='error')throw new Error(item.error);
     if(item.type==='progress') {
       const {done,total}=item;
@@ -588,6 +791,15 @@ async function translateTab(tab,signal) {
   if(!result)throw new Error('Verbindung abgebrochen. Keine vollständige Übersetzung erhalten.');
   return result;
 }
+const refinePrompt=$('refine-prompt').content.textContent;
+// German: shortform is formatted locally; longform is refined by the model, or grouped locally without one.
+async function refineTab(tab,signal) {
+  const kind=formatOf(tab);
+  if(kind==='long' && providerReady())return providerRun(tab,signal,'refine');
+  tab.request=null;tab.translationParts=[];
+  if(kind==='long')tab.notice='Lokal gegliedert. Für den Feinschliff Claude oder ChatGPT verbinden.';
+  return localRefine(tab.source,kind);
+}
 const providerReady=()=>provider==='chatgpt'?connected && !!$('model').value:!!claudeState?.ready;
 let jobController=null;
 // One job at a time: the local server translates one text at a time anyway.
@@ -598,18 +810,25 @@ async function runQueue() {
     for(;;) {
       const tab=tabs.find(item=>item.state==='queued');
       if(!tab)break;
+      startHistoryAttempt(tab);tab.notice='';
       tab.state='running';tab.error='';jobController=new AbortController();const signal=jobController.signal;
       if(tab===cur())render();else renderDots();
       try {
         if(tab.file)await transcribeTab(tab,signal);
-        if(!providerReady()){tab.state='idle';tab.error='Englisches Transkript fertig. Zum Übersetzen einen Anbieter verbinden.';continue;}
-        tab.output=await translateTab(tab,signal);
+        tab.sourceLanguage ||= tab.guess || 'en';
+        if(tab.sourceLanguage==='de'){tab.output=await refineTab(tab,signal);tab.refined[formatOf(tab)]=tab.output;}
+        else {
+          if(!providerReady()){tab.state='idle';tab.error='Englisches Transkript fertig. Zum Übersetzen einen Anbieter verbinden.';saveHistory(tab);continue;}
+          tab.output=await providerRun(tab,signal,'translate');
+        }
         tab.state='idle';tab.language='german';
-        saveHistory(tab);
+        const saved=saveHistory(tab);
         finished(tab);
+        if(!saved)status('Verlauf nicht gespeichert. Aktuelle Texte bitte sichern; bestehende Einträge bleiben erhalten.',true);
       } catch(error) {
         tab.state='idle';tab.output='';
-        tab.error=error.name==='AbortError'?'Abgebrochen. Keine vollständige Übersetzung erstellt.':error.message;
+        tab.error=error.name==='AbortError'?'Abgebrochen. Kein vollständiges Ergebnis erstellt.':error.message;
+        saveHistory(tab);
         if(error.name!=='AbortError' && !tab.file)init();
       } finally {
         if(job.tab===tab)job.tab=null;
@@ -637,26 +856,59 @@ function formatUnclear(tab=cur()) {
   const {seconds,basis}=scriptLength(tab);
   return !tab.formatOverride && basis==='estimate' && seconds>=UNCLEAR_SECONDS[0] && seconds<=UNCLEAR_SECONDS[1];
 }
-function startTranslation() {
-  if($('format-choice').open)return;
-  if(!formatUnclear())return queueTab(cur());
+// Asks only what the material cannot tell: first the language of pasted text, then the length near 3 minutes.
+function startWork() {
+  const tab=cur();
+  if($('format-choice').open || $('language-choice').open)return;
+  if(!tab.sourceLanguage) {
+    if(!tab.guess)return $('language-choice').showModal();
+    tab.sourceLanguage=tab.guess;
+  }
+  if(tab.sourceLanguage==='en' && !providerReady())return applyProvider();
+  if(!formatUnclear())return queueTab(tab);
   $('format-choice').showModal();
 }
+for(const button of $('language-choice').querySelectorAll('[data-language]'))button.onclick=()=>{
+  cur().sourceLanguage=button.dataset.language;$('language-choice').close();startWork();
+};
 // The buttons act on click directly; the dialog's close event can be deferred while the window is hidden.
 for(const button of $('format-choice').querySelectorAll('[data-format]'))button.onclick=()=>{
   cur().formatOverride=button.dataset.format;$('format-choice').close();queueTab(cur());
 };
+// Text, transcripts and subtitles are read directly. Subtitles lose cue numbers and times; their last time gives the length.
+const TEXT_PATTERN=/\.(txt|md|srt|vtt)$/i;
+const isText=file=>TEXT_PATTERN.test(file.name) || file.type==='text/plain';
+const CUE_TIME=/(?:(\d+):)?(\d{1,2}):(\d{2})[.,]\d{3}/g;
+function readSubtitles(raw) {
+  let seconds=null;const lines=[];
+  for(const line of raw.replace(/\r/g,'').split('\n')) {
+    const text=line.trim();
+    if(text.includes('-->')){for(const m of text.matchAll(CUE_TIME))seconds=(+(m[1]||0))*3600+(+m[2])*60+(+m[3]);continue;}
+    if(!text || /^\d+$/.test(text) || /^(WEBVTT|NOTE|STYLE|Kind:|Language:)/.test(text))continue;
+    const clean=text.replace(/<[^>]+>/g,'').trim();
+    if(clean && clean!==lines.at(-1))lines.push(clean);
+  }
+  return {text:lines.join(' '),seconds};
+}
+async function textTab(file) {
+  const raw=await file.text(), subtitles=/\.(srt|vtt)$/i.test(file.name);
+  const {text,seconds}=subtitles?readSubtitles(raw):{text:raw.trim(),seconds:null};
+  return Object.assign(newTab(),{source:text,fileName:file.name,mediaSeconds:seconds,guess:textLanguage(text)});
+}
 // Several files: the first fills the visible tab if it is empty, every further file gets a tab to the right.
-function addFiles(fileList) {
-  const files=[...fileList].filter(isMedia);
-  if(!files.length){if(fileList.length)status('Bitte eine Video- oder Audiodatei wählen.',true);return;}
-  let insertAt=active+1, first=null;
-  files.forEach((file,i)=>{
-    const tab=Object.assign(newTab(),{file,fileName:file.name,state:'queued'});
+// Media is transcribed right away; text starts on its own when language and length are clear.
+async function addFiles(fileList) {
+  const files=[...fileList].filter(file=>isMedia(file) || isText(file));
+  if(!files.length){if(fileList.length)status('Bitte eine Video-, Audio-, Untertitel- oder Textdatei wählen.',true);return;}
+  const made=await Promise.all(files.map(file=>isMedia(file)
+    ?Object.assign(newTab(),{file,fileName:file.name,state:'queued',transcription:{fileName:file.name,sizeBytes:file.size,mimeType:file.type,lastModified:file.lastModified}})
+    :textTab(file)));
+  let insertAt=active+1;
+  made.forEach((tab,i)=>{
+    if(!tab.file && tab.guess && !formatUnclear(tab) && (tab.guess==='de' || providerReady())){tab.sourceLanguage=tab.guess;tab.state='queued';}
     if(i===0 && isEmptyTab(cur()))tabs[active]=tab;else tabs.splice(insertAt++,0,tab);
-    first ??= tab;
   });
-  const index=tabs.indexOf(first), motion=index===active?'':'slide-left';
+  const index=tabs.indexOf(made[0]), motion=index===active?'':'slide-left';
   active=index;render(motion);renderDots();runQueue();
 }
 $('file-input').onchange=()=>{const files=$('file-input').files;addFiles(files);$('file-input').value='';};
@@ -674,9 +926,9 @@ document.addEventListener('drop',event=>{
 $('action').onclick=()=>{
   const tab=cur();
   if(tab.state==='running'){jobController?.abort();return;}
-  if(tab.state==='queued'){tab.state='idle';tab.error='';render();return;}
+  if(tab.state==='queued'){startHistoryAttempt(tab);tab.state='idle';tab.error='Abgebrochen, bevor die Verarbeitung gestartet wurde.';saveHistory(tab);render();return;}
   if(language==='german')return copy();
-  if(!$('action').disabled)return startTranslation();
+  if(!$('action').disabled)return startWork();
 };
 // Keyboard: Cmd/Ctrl+Enter runs the main action, Cmd/Ctrl+Backspace clears, Cmd/Ctrl+, opens settings,
 // Cmd/Ctrl+T opens a tab, Cmd/Ctrl+arrows switch tabs (and open one at either end), Shift+Tab (main area),
@@ -688,6 +940,7 @@ document.addEventListener('keydown',event=>{
   const inOverlay=dialogOpen || $('settings').matches(':popover-open');
   if(mod&&event.key==='Enter'&&!$('action').disabled&&!dialogOpen){event.preventDefault();$('action').click();return;}
   if(mod&&event.key===','){event.preventDefault();$('settings').togglePopover();return;}
+  if(mod&&event.key.toLowerCase()==='f'&&(!dialogOpen||$('history').open)){event.preventDefault();showHistory();return;}
   if(mod&&event.key.toLowerCase()==='o'&&!dialogOpen){event.preventDefault();$('file-input').click();return;}
   if(mod&&event.key.toLowerCase()==='t'&&!inOverlay){event.preventDefault();openTab('after');return;}
   if(mod&&!event.shiftKey&&!event.altKey&&(event.key==='ArrowLeft'||event.key==='ArrowRight')&&!inOverlay){event.preventDefault();step(event.key==='ArrowLeft'?-1:1);return;}
@@ -696,7 +949,7 @@ document.addEventListener('keydown',event=>{
   const shiftTab=event.shiftKey&&!mod&&!event.altKey&&event.key==='Tab'&&!inOverlay;
   const tabSwitch=event.ctrlKey&&!event.metaKey&&event.key==='Tab';
   const bracketSwitch=event.metaKey&&event.shiftKey&&(event.code==='BracketLeft'||event.code==='BracketRight');
-  if((shiftTab||tabSwitch||bracketSwitch)&&!running&&!dialogOpen) {
+  if((shiftTab||tabSwitch||bracketSwitch)&&!running&&!dialogOpen&&cur().sourceLanguage!=='de') {
     event.preventDefault();
     showLanguage(language==='english'?'german':'english',true);
   }

@@ -159,3 +159,17 @@ Die App bringt Claude Code nicht mit und bietet keinen eigenen Claude-Login an. 
 - OpenAI: [Überblick](https://developers.openai.com/siwc/token-sharing-open-source), [Anmeldung](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), [Modelle und Inferenz](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference), [Tokenreferenz](https://developers.openai.com/siwc/token-sharing-open-source/token-reference), [Preview-Grenzen](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations), [UI-Hinweise](https://developers.openai.com/siwc/ui-ux-guidelines)
 
 OAuth nutzt Authorization Code mit PKCE, dynamische Registrierung beim ersten Mal, stabile Host-ID, state/nonce und RS256-ID-Token-Prüfung per offizieller JWKS. Callback: `http://127.0.0.1:<Port>/auth/callback`. Inferenz läuft über `https://api.openai.com/v1/responses` mit `store:false` und `stream:true`.
+
+## Verlauf und Transkriptprüfung (1.6.1)
+
+Ein Klick im Verlauf öffnet Details; „Zurück zum Verlauf“ oder Escape schließt sie. Neue Versuche bewahren englisches Originaltranskript, bearbeiteten Quelltext, deutsche Übersetzung, erzeugte Teile, Prompt, Anbieter/Modell und Importmetadaten getrennt. Fehler und Abbrüche erhalten vorhandene Teiltexte. Jeder erneute Lauf erhält einen eigenen Eintrag. Alte Einträge bleiben lesbar; damals nicht gespeicherte Daten sind unbekannt.
+
+Verbrauch zeigt ausschließlich vom Anbieter gemeldete Tokenzähler pro Teil, keine Schätzung von Kosten oder verbleibendem Abokontingent. Fehlende Werte bleiben unbekannt. Der Verlauf bleibt lokal. Ist der lokale Speicher voll, werden bestehende Einträge nicht automatisch gelöscht; eine Meldung fordert zum Sichern der aktuellen Texte auf.
+
+Stumme bzw. ungültige Audiodaten werden vor der Spracherkennung abgefangen. Vier direkt aufeinanderfolgende gleiche Wortgruppen lösen eine Prüfmeldung aus: Das vollständige Original bleibt erhalten und wird nicht automatisch übersetzt. Wiederholung kann beabsichtigt sein; Text mit dem Video vergleichen, bei Bedarf korrigieren und Übersetzen erneut bewusst starten. Das englische Whisper-Modell bleibt unverändert; die Meldung beweist keine konkrete Fehlerursache.
+
+## Videosprache (1.6.2)
+
+Vor dem Import die gesprochene Sprache wählen. Englisch behält Whisper small.en und die anschließende deutsche Übersetzung. Deutsch verwendet das mehrsprachige `onnx-community/whisper-small` mit `language: german`, `task: transcribe`, lokal auf der CPU mit q8. Beim ersten deutschen Import werden etwa 250 MB Modelldaten von Hugging Face geladen (Encoder 92,3 MB, Decoder 157 MB plus kleine Konfigurationsdateien); Video und Audio werden nicht hochgeladen. Die Wahl gilt nur für neue Importe und wird im jeweiligen Verlaufseintrag gespeichert.
+
+Ein deutsches Original bleibt ein deutsches Originaltranskript. Es wird keine englische Zwischenübersetzung und keine zusätzliche deutsche Übersetzung erzeugt oder als Original ausgegeben. „Original kopieren“ kopiert dieses Transkript; der Verlauf weist Anbieter und Anbieternutzung als nicht angefallen bzw. nicht gemeldet aus. Die Sprache wird bewusst gewählt, nicht automatisch erraten.

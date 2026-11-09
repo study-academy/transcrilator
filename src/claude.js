@@ -1,3 +1,4 @@
+import {reportedUsage} from './usage.js';
 import {spawn} from 'node:child_process';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -56,7 +57,7 @@ export class ClaudePlan {
       return {installed:error.code!=='ENOENT',ready:false,reason:error.code==='ENOENT'?'Claude Code separat von Anthropic installieren und persönlich mit dem eigenen Claude-Plan anmelden.':'Claude Code konnte nicht sicher geprüft werden. Bitte Installation und Anmeldung im Terminal prüfen.'};
     }
   }
-  async translate({text,prompt=DEFAULT_PROMPT,signal,progress=()=>{}}) {
+  async translate({text,prompt=DEFAULT_PROMPT,signal,progress=()=>{},part=()=>{}}) {
     const chunks=splitText(text);
     if(typeof prompt!=='string'||!prompt.trim()||prompt.length>12000)throw new Error('Ungültiger Prompt.');
     const availability=await this.inspect({signal});
@@ -71,7 +72,7 @@ export class ClaudePlan {
     const worker=async()=>{
       while(!failure && next<chunks.length) {
         const index=next++;
-        try{result[index]=await this.translateChunk(chunks[index],prompt,local.signal);}
+        try{result[index]=await this.translateChunk(chunks[index],prompt,local.signal,details=>part({index,...details}));}
         catch(error){failure ||= error;local.abort(error);return;}
         progress({done:++done,total:chunks.length});
       }
@@ -81,13 +82,14 @@ export class ClaudePlan {
     if(failure)throw signal?.aborted?signal.reason:failure;
     return result.join('\n\n');
   }
-  async translateChunk(chunk,prompt,signal) {
+  async translateChunk(chunk,prompt,signal,part=()=>{}) {
     signal?.throwIfAborted();
     const response=await this.inEmptyDirectory(cwd=>this.run(this.executable,[
       '-p','--safe-mode','--tools','','--disallowedTools','mcp__*','--strict-mcp-config','--mcp-config','{"mcpServers":{}}',
       '--no-session-persistence','--no-chrome','--permission-prompts','none','--output-format','json','--model','sonnet','--system-prompt',prompt
     ],{cwd,env:this.env,input:chunk,signal,timeout:180000}));
     let data;try{data=JSON.parse(response.stdout);}catch{throw new Error('Claude Code hat keine gültige vollständige JSON-Antwort geliefert.');}
+    if(data.type==='result' && typeof data.result==='string' && data.result.length<=200000)part({text:data.result,complete:false,usage:reportedUsage(data.usage,'claude')});
     if(response.code!==0 || data.type!=='result' || data.subtype!=='success' || data.is_error!==false || typeof data.result!=='string' || !data.result.trim() || data.result.length>200000 || data.permission_denials?.length || data.stop_reason==='max_tokens') {
       const message=typeof data.result==='string'?data.result:'';
       const category=/usage.?limit|rate.?limit|limit reached|hit your limit|resets/i.test(message)?'usage_limit':/unknown option|unsupported option|invalid.*(?:argument|option|flag)/i.test(message)?'cli_options':/api.?key|billing|credit/i.test(message)?'billing':/not logged|log.?in|authentication|oauth/i.test(message)?'authentication':/permission|denied/i.test(message)?'policy':/network|connection|ENOTFOUND|fetch failed/i.test(message)?'network':'incomplete_result';
@@ -95,6 +97,7 @@ export class ClaudePlan {
       error.diagnostics={exitCode:response.code,category,resultType:data.type==='result'?'result':'other',successSubtype:data.subtype==='success',isError:data.is_error===true,resultCharacters:message.length,permissionDenials:Array.isArray(data.permission_denials)?data.permission_denials.length:0};
       throw error;
     }
+    part({text:data.result.trim(),complete:true,usage:reportedUsage(data.usage,'claude')});
     return data.result.trim();
   }
 }
